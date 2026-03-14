@@ -1,4 +1,5 @@
 import {
+  HeadToHeadSnapshot,
   ScoutMatch,
   ScoutMatchesResponse,
   TeamFormSnapshot,
@@ -30,6 +31,14 @@ const EMPTY_SEASON_STATS: TeamSeasonStatsSnapshot = {
   goals_conceded_season: null,
 };
 
+const EMPTY_HEAD_TO_HEAD: HeadToHeadSnapshot = {
+  last_5_results: [],
+  home_wins: 0,
+  away_wins: 0,
+  draws: 0,
+  avg_goals_h2h: 0,
+};
+
 interface FootballDataCompetitionMatchesResponse {
   matches?: Array<{
     status: string;
@@ -46,22 +55,27 @@ interface FootballDataCompetitionMatchesResponse {
   }>;
 }
 
+interface FootballDataTeamMatch {
+  status: string;
+  utcDate: string;
+  homeTeam: {
+    id: number;
+    name?: string;
+  };
+  awayTeam: {
+    id: number;
+    name?: string;
+  };
+  score: {
+    fullTime: {
+      home: number | null;
+      away: number | null;
+    };
+  };
+}
+
 interface FootballDataTeamMatchesResponse {
-  matches?: Array<{
-    status: string;
-    homeTeam: {
-      id: number;
-    };
-    awayTeam: {
-      id: number;
-    };
-    score: {
-      fullTime: {
-        home: number | null;
-        away: number | null;
-      };
-    };
-  }>;
+  matches?: FootballDataTeamMatch[];
 }
 
 interface FootballDataCompetitionStandingsResponse {
@@ -188,7 +202,7 @@ async function fetchCompetitionMatches(
 
 function computeTeamForm(
   teamId: number,
-  matches: NonNullable<FootballDataTeamMatchesResponse["matches"]>,
+  matches: FootballDataTeamMatch[],
 ): TeamFormSnapshot {
   const finishedMatches = matches.filter((match) => match.status === "FINISHED");
 
@@ -227,15 +241,123 @@ function computeTeamForm(
   };
 }
 
+async function fetchTeamFinishedMatches(
+  teamId: number,
+  limit: number,
+): Promise<FootballDataTeamMatch[]> {
+  const payload = await fetchFootballDataJson<FootballDataTeamMatchesResponse>(
+    `/teams/${teamId}/matches?status=FINISHED&limit=${limit}`,
+  );
+
+  return (payload.matches ?? []).filter((match) => match.status === "FINISHED");
+}
+
 async function fetchTeamForm(teamId: number): Promise<TeamFormSnapshot> {
   try {
-    const payload = await fetchFootballDataJson<FootballDataTeamMatchesResponse>(
-      `/teams/${teamId}/matches?status=FINISHED&limit=5`,
-    );
-
-    return computeTeamForm(teamId, payload.matches ?? []);
+    const matches = await fetchTeamFinishedMatches(teamId, 5);
+    return computeTeamForm(teamId, matches);
   } catch {
     return EMPTY_FORM;
+  }
+}
+
+function computeHeadToHeadFromMatches(
+  homeTeamId: number,
+  awayTeamId: number,
+  fallbackHomeName: string,
+  fallbackAwayName: string,
+  homeTeamRecentMatches: FootballDataTeamMatch[],
+): HeadToHeadSnapshot {
+  const headToHeadMatches = homeTeamRecentMatches
+    .filter((match) => {
+      const isCurrentPairing =
+        (match.homeTeam.id === homeTeamId && match.awayTeam.id === awayTeamId) ||
+        (match.homeTeam.id === awayTeamId && match.awayTeam.id === homeTeamId);
+
+      return isCurrentPairing;
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime(),
+    )
+    .slice(0, 5);
+
+  if (headToHeadMatches.length === 0) {
+    return EMPTY_HEAD_TO_HEAD;
+  }
+
+  const last_5_results: HeadToHeadSnapshot["last_5_results"] = [];
+  let home_wins = 0;
+  let away_wins = 0;
+  let draws = 0;
+  let totalGoals = 0;
+
+  for (const match of headToHeadMatches) {
+    const homeGoals = match.score.fullTime.home;
+    const awayGoals = match.score.fullTime.away;
+
+    if (homeGoals === null || awayGoals === null) {
+      continue;
+    }
+
+    totalGoals += homeGoals + awayGoals;
+
+    if (homeGoals === awayGoals) {
+      draws += 1;
+    } else {
+      const winnerId = homeGoals > awayGoals ? match.homeTeam.id : match.awayTeam.id;
+      if (winnerId === homeTeamId) {
+        home_wins += 1;
+      } else if (winnerId === awayTeamId) {
+        away_wins += 1;
+      }
+    }
+
+    last_5_results.push({
+      home_team: match.homeTeam.name ?? fallbackHomeName,
+      away_team: match.awayTeam.name ?? fallbackAwayName,
+      score: `${homeGoals}-${awayGoals}`,
+      date: match.utcDate.slice(0, 10),
+    });
+  }
+
+  if (last_5_results.length === 0) {
+    return EMPTY_HEAD_TO_HEAD;
+  }
+
+  const avg_goals_h2h = Number((totalGoals / last_5_results.length).toFixed(2));
+
+  return {
+    last_5_results,
+    home_wins,
+    away_wins,
+    draws,
+    avg_goals_h2h,
+  };
+}
+
+async function fetchHeadToHead(
+  match: ScheduledMatchBase,
+  teamFinishedMatchesCache: Map<number, Promise<FootballDataTeamMatch[]>>,
+): Promise<HeadToHeadSnapshot> {
+  try {
+    if (!teamFinishedMatchesCache.has(match.home_team_id)) {
+      teamFinishedMatchesCache.set(
+        match.home_team_id,
+        fetchTeamFinishedMatches(match.home_team_id, 20),
+      );
+    }
+
+    const homeTeamMatches = await teamFinishedMatchesCache.get(match.home_team_id);
+    return computeHeadToHeadFromMatches(
+      match.home_team_id,
+      match.away_team_id,
+      match.home_team,
+      match.away_team,
+      homeTeamMatches ?? [],
+    );
+  } catch {
+    return EMPTY_HEAD_TO_HEAD;
   }
 }
 
@@ -250,6 +372,7 @@ async function addEnrichmentToMatch(
   match: ScheduledMatchBase,
   teamFormCache: Map<number, Promise<TeamFormSnapshot>>,
   standingsMap: Map<number, TeamSeasonStatsSnapshot>,
+  teamFinishedMatchesCache: Map<number, Promise<FootballDataTeamMatch[]>>,
 ): Promise<ScoutMatch> {
   if (!teamFormCache.has(match.home_team_id)) {
     teamFormCache.set(match.home_team_id, fetchTeamForm(match.home_team_id));
@@ -259,9 +382,10 @@ async function addEnrichmentToMatch(
     teamFormCache.set(match.away_team_id, fetchTeamForm(match.away_team_id));
   }
 
-  const [homeForm, awayForm] = await Promise.all([
+  const [homeForm, awayForm, headToHead] = await Promise.all([
     teamFormCache.get(match.home_team_id),
     teamFormCache.get(match.away_team_id),
+    fetchHeadToHead(match, teamFinishedMatchesCache),
   ]);
 
   return {
@@ -270,6 +394,7 @@ async function addEnrichmentToMatch(
     away_form: awayForm ?? EMPTY_FORM,
     home_season_stats: getSeasonStatsForTeam(match.home_team_id, standingsMap),
     away_season_stats: getSeasonStatsForTeam(match.away_team_id, standingsMap),
+    head_to_head: headToHead,
   };
 }
 
@@ -303,7 +428,10 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   );
 
   const scheduledMatches: ScheduledMatchBase[] = [];
-  const standingsByCompetition = new Map<string, Map<number, TeamSeasonStatsSnapshot>>();
+  const standingsByCompetition = new Map<
+    string,
+    Map<number, TeamSeasonStatsSnapshot>
+  >();
   const errors: string[] = [];
 
   for (const result of results) {
@@ -321,18 +449,21 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   }
 
   const teamFormCache = new Map<number, Promise<TeamFormSnapshot>>();
-  const matchesWithFormAndSeason = await Promise.all(
+  const teamFinishedMatchesCache = new Map<number, Promise<FootballDataTeamMatch[]>>();
+
+  const matchesWithEnrichment = await Promise.all(
     scheduledMatches.map((match) =>
       addEnrichmentToMatch(
         match,
         teamFormCache,
         standingsByCompetition.get(match.competition_code) ?? new Map(),
+        teamFinishedMatchesCache,
       ),
     ),
   );
 
   return {
-    matches: matchesWithFormAndSeason.sort(
+    matches: matchesWithEnrichment.sort(
       (a, b) =>
         new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
     ),

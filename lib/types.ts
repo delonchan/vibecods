@@ -34,6 +34,21 @@ export interface TeamSeasonStatsSnapshot {
   goals_conceded_season: number | null;
 }
 
+export interface HeadToHeadResult {
+  home_team: string;
+  away_team: string;
+  score: string;
+  date: string;
+}
+
+export interface HeadToHeadSnapshot {
+  last_5_results: HeadToHeadResult[];
+  home_wins: number;
+  away_wins: number;
+  draws: number;
+  avg_goals_h2h: number;
+}
+
 export interface ScoutMatch {
   league: string;
   competition_code: string;
@@ -47,6 +62,7 @@ export interface ScoutMatch {
   away_form?: TeamFormSnapshot;
   home_season_stats?: TeamSeasonStatsSnapshot;
   away_season_stats?: TeamSeasonStatsSnapshot;
+  head_to_head?: HeadToHeadSnapshot;
 }
 
 export interface ScoutMatchesResponse {
