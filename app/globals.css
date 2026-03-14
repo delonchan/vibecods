@@ -43,31 +43,65 @@ body {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
-.player-card {
+.match-card {
   background: #0d172b;
   border: 1px solid #243149;
   border-radius: 12px;
   padding: 0.85rem;
+  display: grid;
+  gap: 0.8rem;
 }
 
-.player-card header {
+.match-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.match-header h3 {
+  margin: 0;
+}
+
+.meta-line {
+  margin: 0.25rem 0 0;
+  color: #b8c7ea;
+}
+
+.enrichment-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.enrichment-card {
+  background: #101d34;
+  border: 1px solid #2b3958;
+  border-radius: 10px;
+  padding: 0.7rem;
+}
+
+.enrichment-card h4 {
+  margin: 0 0 0.5rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
   gap: 0.5rem;
+  padding: 0.2rem 0;
 }
 
-.position {
-  background: #264675;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
+.state-panel {
+  color: #cbd7f8;
 }
 
-.value {
-  font-weight: 700;
+.error-panel {
+  border-color: #7d2d3f;
+  background: #2b1420;
+  color: #ffc9d4;
 }
