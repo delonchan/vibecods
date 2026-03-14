@@ -43,10 +43,10 @@ export interface ScoutMatch {
   away_team_id: number;
   match_date: string;
   venue: string | null;
-  home_form: TeamFormSnapshot;
-  away_form: TeamFormSnapshot;
-  home_season_stats: TeamSeasonStatsSnapshot;
-  away_season_stats: TeamSeasonStatsSnapshot;
+  home_form?: TeamFormSnapshot;
+  away_form?: TeamFormSnapshot;
+  home_season_stats?: TeamSeasonStatsSnapshot;
+  away_season_stats?: TeamSeasonStatsSnapshot;
 }
 
 export interface ScoutMatchesResponse {
