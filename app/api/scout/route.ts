@@ -1,9 +1,9 @@
-import { getScoutDashboardData } from "@/lib/footballData";
+import { getScoutMatchesData } from "@/lib/footballData";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const data = await getScoutDashboardData();
+    const data = await getScoutMatchesData();
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
@@ -13,6 +13,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: message,
+        matches: [],
       },
       { status: 500 },
     );

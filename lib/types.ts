@@ -20,3 +20,18 @@ export interface ScoutDashboardData {
   players: PlayerReport[];
   dataSource: "mock" | "football-data";
 }
+
+export interface ScoutMatch {
+  league: string;
+  competition_code: string;
+  home_team: string;
+  away_team: string;
+  home_team_id: number;
+  away_team_id: number;
+  match_date: string;
+  venue: string | null;
+}
+
+export interface ScoutMatchesResponse {
+  matches: ScoutMatch[];
+}
