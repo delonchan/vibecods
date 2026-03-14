@@ -36,7 +36,7 @@ const EMPTY_HEAD_TO_HEAD: HeadToHeadSnapshot = {
   home_wins: 0,
   away_wins: 0,
   draws: 0,
-  avg_goals_h2h: 0,
+  avg_goals_h2h: null,
 };
 
 interface FootballDataCompetitionMatchesResponse {

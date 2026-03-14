@@ -46,7 +46,7 @@ export interface HeadToHeadSnapshot {
   home_wins: number;
   away_wins: number;
   draws: number;
-  avg_goals_h2h: number;
+  avg_goals_h2h: number | null;
 }
 
 export interface ScoutMatch {
