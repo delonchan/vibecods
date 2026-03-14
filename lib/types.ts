@@ -21,6 +21,12 @@ export interface ScoutDashboardData {
   dataSource: "mock" | "football-data";
 }
 
+export interface TeamFormSnapshot {
+  last_5_form: Array<"W" | "D" | "L">;
+  recent_goals_scored: number[];
+  recent_goals_conceded: number[];
+}
+
 export interface ScoutMatch {
   league: string;
   competition_code: string;
@@ -30,6 +36,8 @@ export interface ScoutMatch {
   away_team_id: number;
   match_date: string;
   venue: string | null;
+  home_form: TeamFormSnapshot;
+  away_form: TeamFormSnapshot;
 }
 
 export interface ScoutMatchesResponse {
