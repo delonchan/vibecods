@@ -27,6 +27,13 @@ export interface TeamFormSnapshot {
   recent_goals_conceded: number[];
 }
 
+export interface TeamSeasonStatsSnapshot {
+  position: number | null;
+  points: number | null;
+  goals_scored_season: number | null;
+  goals_conceded_season: number | null;
+}
+
 export interface ScoutMatch {
   league: string;
   competition_code: string;
@@ -38,6 +45,8 @@ export interface ScoutMatch {
   venue: string | null;
   home_form: TeamFormSnapshot;
   away_form: TeamFormSnapshot;
+  home_season_stats: TeamSeasonStatsSnapshot;
+  away_season_stats: TeamSeasonStatsSnapshot;
 }
 
 export interface ScoutMatchesResponse {

@@ -1,4 +1,9 @@
-import { ScoutMatch, ScoutMatchesResponse, TeamFormSnapshot } from "@/lib/types";
+import {
+  ScoutMatch,
+  ScoutMatchesResponse,
+  TeamFormSnapshot,
+  TeamSeasonStatsSnapshot,
+} from "@/lib/types";
 
 const FOOTBALL_DATA_BASE_URL =
   process.env.FOOTBALL_DATA_BASE_URL ?? "https://api.football-data.org/v4";
@@ -16,6 +21,13 @@ const EMPTY_FORM: TeamFormSnapshot = {
   last_5_form: [],
   recent_goals_scored: [],
   recent_goals_conceded: [],
+};
+
+const EMPTY_SEASON_STATS: TeamSeasonStatsSnapshot = {
+  position: null,
+  points: null,
+  goals_scored_season: null,
+  goals_conceded_season: null,
 };
 
 interface FootballDataCompetitionMatchesResponse {
@@ -52,6 +64,20 @@ interface FootballDataTeamMatchesResponse {
   }>;
 }
 
+interface FootballDataCompetitionStandingsResponse {
+  standings?: Array<{
+    table?: Array<{
+      position: number;
+      points: number;
+      goalsFor: number;
+      goalsAgainst: number;
+      team: {
+        id: number;
+      };
+    }>;
+  }>;
+}
+
 interface ScheduledMatchBase {
   league: string;
   competition_code: string;
@@ -61,6 +87,11 @@ interface ScheduledMatchBase {
   away_team_id: number;
   match_date: string;
   venue: string | null;
+}
+
+interface CompetitionFetchResult {
+  matches: ScheduledMatchBase[];
+  standingsMap: Map<number, TeamSeasonStatsSnapshot>;
 }
 
 function getAuthHeaders(): HeadersInit {
@@ -92,18 +123,48 @@ function isWithinNext48Hours(isoDate: string): boolean {
   return matchTime >= now && matchTime <= now + fortyEightHoursMs;
 }
 
+function buildStandingsLookup(
+  payload: FootballDataCompetitionStandingsResponse,
+): Map<number, TeamSeasonStatsSnapshot> {
+  const standingsMap = new Map<number, TeamSeasonStatsSnapshot>();
+
+  for (const standings of payload.standings ?? []) {
+    for (const tableRow of standings.table ?? []) {
+      standingsMap.set(tableRow.team.id, {
+        position: tableRow.position,
+        points: tableRow.points,
+        goals_scored_season: tableRow.goalsFor,
+        goals_conceded_season: tableRow.goalsAgainst,
+      });
+    }
+  }
+
+  return standingsMap;
+}
+
+async function fetchCompetitionStandings(
+  competitionCode: string,
+): Promise<Map<number, TeamSeasonStatsSnapshot>> {
+  const payload =
+    await fetchFootballDataJson<FootballDataCompetitionStandingsResponse>(
+      `/competitions/${competitionCode}/standings`,
+    );
+
+  return buildStandingsLookup(payload);
+}
+
 async function fetchCompetitionMatches(
   competitionCode: string,
   leagueName: string,
-): Promise<ScheduledMatchBase[]> {
-  const payload =
-    await fetchFootballDataJson<FootballDataCompetitionMatchesResponse>(
+): Promise<CompetitionFetchResult> {
+  const [matchesPayload, standingsMap] = await Promise.all([
+    fetchFootballDataJson<FootballDataCompetitionMatchesResponse>(
       `/competitions/${competitionCode}/matches`,
-    );
+    ),
+    fetchCompetitionStandings(competitionCode),
+  ]);
 
-  const matches = payload.matches ?? [];
-
-  return matches
+  const matches = (matchesPayload.matches ?? [])
     .filter(
       (match) =>
         match.status === "SCHEDULED" && isWithinNext48Hours(match.utcDate),
@@ -118,6 +179,11 @@ async function fetchCompetitionMatches(
       match_date: match.utcDate,
       venue: match.venue ?? null,
     }));
+
+  return {
+    matches,
+    standingsMap,
+  };
 }
 
 function computeTeamForm(
@@ -173,9 +239,17 @@ async function fetchTeamForm(teamId: number): Promise<TeamFormSnapshot> {
   }
 }
 
-async function addFormToMatch(
+function getSeasonStatsForTeam(
+  teamId: number,
+  standingsMap: Map<number, TeamSeasonStatsSnapshot>,
+): TeamSeasonStatsSnapshot {
+  return standingsMap.get(teamId) ?? EMPTY_SEASON_STATS;
+}
+
+async function addEnrichmentToMatch(
   match: ScheduledMatchBase,
   teamFormCache: Map<number, Promise<TeamFormSnapshot>>,
+  standingsMap: Map<number, TeamSeasonStatsSnapshot>,
 ): Promise<ScoutMatch> {
   if (!teamFormCache.has(match.home_team_id)) {
     teamFormCache.set(match.home_team_id, fetchTeamForm(match.home_team_id));
@@ -194,6 +268,8 @@ async function addFormToMatch(
     ...match,
     home_form: homeForm ?? EMPTY_FORM,
     away_form: awayForm ?? EMPTY_FORM,
+    home_season_stats: getSeasonStatsForTeam(match.home_team_id, standingsMap),
+    away_season_stats: getSeasonStatsForTeam(match.away_team_id, standingsMap),
   };
 }
 
@@ -205,10 +281,15 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   const results = await Promise.all(
     COMPETITIONS.map(async (competition) => {
       try {
-        return await fetchCompetitionMatches(
+        const result = await fetchCompetitionMatches(
           competition.code,
           competition.league,
         );
+
+        return {
+          code: competition.code,
+          ...result,
+        };
       } catch (error) {
         return {
           error:
@@ -222,11 +303,13 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   );
 
   const scheduledMatches: ScheduledMatchBase[] = [];
+  const standingsByCompetition = new Map<string, Map<number, TeamSeasonStatsSnapshot>>();
   const errors: string[] = [];
 
   for (const result of results) {
-    if (Array.isArray(result)) {
-      scheduledMatches.push(...result);
+    if ("matches" in result && "standingsMap" in result) {
+      scheduledMatches.push(...result.matches);
+      standingsByCompetition.set(result.code, result.standingsMap);
       continue;
     }
 
@@ -238,12 +321,18 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   }
 
   const teamFormCache = new Map<number, Promise<TeamFormSnapshot>>();
-  const matchesWithForm = await Promise.all(
-    scheduledMatches.map((match) => addFormToMatch(match, teamFormCache)),
+  const matchesWithFormAndSeason = await Promise.all(
+    scheduledMatches.map((match) =>
+      addEnrichmentToMatch(
+        match,
+        teamFormCache,
+        standingsByCompetition.get(match.competition_code) ?? new Map(),
+      ),
+    ),
   );
 
   return {
-    matches: matchesWithForm.sort(
+    matches: matchesWithFormAndSeason.sort(
       (a, b) =>
         new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
     ),
