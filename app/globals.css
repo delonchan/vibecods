@@ -41,6 +41,63 @@ body {
   text-transform: uppercase;
 }
 
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-card {
+  background: #0d172b;
+  border: 1px solid #243149;
+  border-radius: 12px;
+  padding: 0.7rem;
+}
+
+.metric-card h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #c4d1f0;
+}
+
+.metric-card p {
+  margin: 0.5rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.metric-sub {
+  font-size: 0.78rem;
+  color: #9eb1de;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.history-table th,
+.history-table td {
+  border: 1px solid #2a3857;
+  padding: 0.5rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.85rem;
+}
+
+.history-table th {
+  background: #182645;
+}
+
+.history-table tr:nth-child(even) {
+  background: #0f1a32;
+}
+
 .cards-grid {
   display: grid;
   grid-template-columns: 1fr;

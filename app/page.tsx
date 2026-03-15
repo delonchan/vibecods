@@ -2,12 +2,19 @@
 
 import {
   MatchIntelligenceSnapshot,
+  PredictionRecord,
   ScoutMatch,
   ScoutMatchesResponse,
+  ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
 } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
+
+interface ScoutHistoryResponse {
+  history: PredictionRecord[];
+  error?: string;
+}
 
 function formatForm(form?: TeamFormSnapshot): string {
   if (!form?.last_5_form?.length) {
@@ -52,6 +59,14 @@ function formatMetric(value: number | null | undefined, suffix = ""): string {
   return `${value}${suffix}`;
 }
 
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "N/A";
+  }
+
+  return `${value.toFixed(2)}%`;
+}
+
 function getGoalEnvironmentClass(intelligence?: MatchIntelligenceSnapshot): string {
   const goalEnvironment = intelligence?.goal_environment;
 
@@ -94,6 +109,14 @@ function getPredictabilityClass(score?: number): string {
   }
 
   return "predictability-low";
+}
+
+function boolCell(value: boolean | null): string {
+  if (value === null) {
+    return "N/A";
+  }
+
+  return value ? "Yes" : "No";
 }
 
 function MatchCard({ match }: { match: ScoutMatch }) {
@@ -224,15 +247,6 @@ function MatchCard({ match }: { match: ScoutMatch }) {
               {formatMetric(match.intelligence?.predictability_score)}
             </strong>
           </div>
-          <div className="stat-row">
-            <span>Predictability Band</span>
-            <strong className={getPredictabilityClass(match.intelligence?.predictability_score)}>
-              {match.intelligence?.predictability_score === null ||
-              match.intelligence?.predictability_score === undefined
-                ? "N/A"
-                : getPredictabilityBand(match.intelligence.predictability_score).toUpperCase()}
-            </strong>
-          </div>
         </section>
       </div>
     </article>
@@ -241,31 +255,52 @@ function MatchCard({ match }: { match: ScoutMatch }) {
 
 export default function HomePage() {
   const [matches, setMatches] = useState<ScoutMatch[]>([]);
+  const [metrics, setMetrics] = useState<ScoutPredictionMetrics | null>(null);
+  const [history, setHistory] = useState<PredictionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
-    async function loadMatches() {
+    async function loadDashboard() {
       setLoading(true);
       setError(null);
 
       try {
-        const response = await fetch("/api/scout", { cache: "no-store" });
-        const payload = (await response.json()) as ScoutMatchesResponse & {
+        const [matchesResponse, metricsResponse, historyResponse] = await Promise.all([
+          fetch("/api/scout", { cache: "no-store" }),
+          fetch("/api/scout/metrics", { cache: "no-store" }),
+          fetch("/api/scout/history", { cache: "no-store" }),
+        ]);
+
+        const matchesPayload = (await matchesResponse.json()) as ScoutMatchesResponse & {
           error?: string;
         };
+        const metricsPayload = (await metricsResponse.json()) as ScoutPredictionMetrics & {
+          error?: string;
+        };
+        const historyPayload = (await historyResponse.json()) as ScoutHistoryResponse;
 
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to load scouting data.");
+        if (!matchesResponse.ok) {
+          throw new Error(matchesPayload.error ?? "Unable to load scouting data.");
+        }
+
+        if (!metricsResponse.ok) {
+          throw new Error(metricsPayload.error ?? "Unable to load scouting metrics.");
+        }
+
+        if (!historyResponse.ok) {
+          throw new Error(historyPayload.error ?? "Unable to load prediction history.");
         }
 
         if (!active) {
           return;
         }
 
-        setMatches(payload.matches ?? []);
+        setMatches(matchesPayload.matches ?? []);
+        setMetrics(metricsPayload);
+        setHistory(historyPayload.history ?? []);
       } catch (loadError) {
         if (!active) {
           return;
@@ -274,7 +309,7 @@ export default function HomePage() {
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Unable to load scouting data.",
+            : "Unable to load dashboard data.",
         );
       } finally {
         if (active) {
@@ -283,12 +318,31 @@ export default function HomePage() {
       }
     }
 
-    loadMatches();
+    loadDashboard();
 
     return () => {
       active = false;
     };
   }, []);
+
+  const completedHistory = useMemo(
+    () => history.filter((record) => record.correct_result !== null),
+    [history],
+  );
+
+  const confidenceCounts = useMemo(() => {
+    const high = completedHistory.filter(
+      (record) => record.confidence_band === "high",
+    ).length;
+    const medium = completedHistory.filter(
+      (record) => record.confidence_band === "medium",
+    ).length;
+    const low = completedHistory.filter((record) => record.confidence_band === "low").length;
+
+    return { high, medium, low };
+  }, [completedHistory]);
+
+  const historyRows = useMemo(() => [...history].reverse().slice(0, 50), [history]);
 
   const titleText = useMemo(() => {
     if (loading) return "Loading scouting data...";
@@ -304,12 +358,97 @@ export default function HomePage() {
       </section>
 
       {loading ? (
-        <section className="panel state-panel">Loading matches from /api/scout…</section>
+        <section className="panel state-panel">Loading matches, metrics and history…</section>
       ) : null}
 
       {!loading && error ? (
         <section className="panel state-panel error-panel">
-          Failed to load scouting matches: {error}
+          Failed to load dashboard data: {error}
+        </section>
+      ) : null}
+
+      {!loading && !error ? (
+        <section className="panel metrics-panel">
+          <h2>Prediction Metrics</h2>
+          <div className="metrics-grid">
+            <article className="metric-card">
+              <h3>Overall Accuracy</h3>
+              <p>{formatPercent(metrics?.overall_accuracy)}</p>
+            </article>
+            <article className="metric-card">
+              <h3>Sample Size</h3>
+              <p>{statValue(metrics?.sample_size)}</p>
+            </article>
+            <article className="metric-card">
+              <h3>Last 20 Accuracy</h3>
+              <p>{formatPercent(metrics?.last_20_accuracy)}</p>
+            </article>
+            <article className="metric-card">
+              <h3>High Confidence Accuracy</h3>
+              <p>{formatPercent(metrics?.high_confidence_accuracy)}</p>
+              <span className="metric-sub">Sample: {confidenceCounts.high}</span>
+            </article>
+            <article className="metric-card">
+              <h3>Medium Confidence Accuracy</h3>
+              <p>{formatPercent(metrics?.medium_confidence_accuracy)}</p>
+              <span className="metric-sub">Sample: {confidenceCounts.medium}</span>
+            </article>
+            <article className="metric-card">
+              <h3>Low Confidence Accuracy</h3>
+              <p>{formatPercent(metrics?.low_confidence_accuracy)}</p>
+              <span className="metric-sub">Sample: {confidenceCounts.low}</span>
+            </article>
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && !error ? (
+        <section className="panel history-panel">
+          <h2>Prediction History</h2>
+          {historyRows.length === 0 ? (
+            <p className="state-panel">No prediction history available yet.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>Match</th>
+                    <th>League</th>
+                    <th>Match Date</th>
+                    <th>Predicted Result</th>
+                    <th>Confidence Band</th>
+                    <th>Expected Goals</th>
+                    <th>BTTS Probability</th>
+                    <th>Final Score</th>
+                    <th>Correct Result</th>
+                    <th>Correct BTTS Signal</th>
+                    <th>Correct Goal Environment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyRows.map((record) => (
+                    <tr key={record.match_id}>
+                      <td>{record.home_team} vs {record.away_team}</td>
+                      <td>{record.league}</td>
+                      <td>{formatDate(record.match_date)}</td>
+                      <td>{record.predicted_result ?? "N/A"}</td>
+                      <td>{record.confidence_band ?? "N/A"}</td>
+                      <td>{formatMetric(record.expected_goals)}</td>
+                      <td>{formatMetric(record.btts_probability, "%")}</td>
+                      <td>
+                        {record.final_home_goals === null || record.final_away_goals === null
+                          ? "N/A"
+                          : `${record.final_home_goals}-${record.final_away_goals}`}
+                      </td>
+                      <td>{boolCell(record.correct_result)}</td>
+                      <td>{boolCell(record.correct_btts_signal)}</td>
+                      <td>{boolCell(record.correct_goal_environment)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       ) : null}
 
