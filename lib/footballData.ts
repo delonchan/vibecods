@@ -18,6 +18,7 @@ import {
 const FOOTBALL_DATA_BASE_URL =
   process.env.FOOTBALL_DATA_BASE_URL ?? "https://api.football-data.org/v4";
 const FOOTBALL_DATA_API_KEY = process.env.FOOTBALL_DATA_API_KEY;
+const MODEL_VERSION = "v1-strength-delta";
 
 const COMPETITIONS = [
   { code: "PL", league: "Premier League" },
@@ -135,6 +136,7 @@ function buildPredictionRecord(match: ScoutMatch): PredictionRecord {
     away_team_id: match.away_team_id,
     match_date: match.match_date,
     generated_at: new Date().toISOString(),
+    model_version: MODEL_VERSION,
     expected_goals: intelligence.expected_goals,
     btts_probability: intelligence.btts_probability,
     goal_environment: intelligence.goal_environment,
@@ -893,6 +895,7 @@ export async function refreshUpcomingPredictions(): Promise<UpcomingPredictionRe
 
   return {
     generated_at: new Date().toISOString(),
+    model_version: MODEL_VERSION,
     upcoming_matches: scoutData.matches.length,
     new_predictions_stored: Math.max(afterCount - beforeCount, 0),
   };

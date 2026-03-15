@@ -93,6 +93,7 @@ export interface PredictionRecord {
   away_team_id: number;
   match_date: string;
   generated_at: string;
+  model_version: string;
   expected_goals: number;
   btts_probability: number;
   goal_environment: "low" | "medium" | "high";
@@ -121,6 +122,7 @@ export interface ScoutPredictionMetrics {
 
 export interface UpcomingPredictionRefreshSummary {
   generated_at: string;
+  model_version: string;
   upcoming_matches: number;
   new_predictions_stored: number;
 }
