@@ -350,6 +350,30 @@ export default function HomePage() {
     return "Upcoming Match Scout Board";
   }, [loading, error]);
 
+  const calibrationStatus = useMemo(() => {
+    const high = metrics?.high_confidence_accuracy;
+    const medium = metrics?.medium_confidence_accuracy;
+
+    if (high === null || high === undefined || medium === null || medium === undefined) {
+      return {
+        label: "Calibration check unavailable",
+        tone: "calibration-neutral",
+      };
+    }
+
+    if (high > medium) {
+      return {
+        label: "High confidence is outperforming medium confidence",
+        tone: "calibration-good",
+      };
+    }
+
+    return {
+      label: "Warning: High confidence accuracy is not better than medium confidence",
+      tone: "calibration-warning",
+    };
+  }, [metrics?.high_confidence_accuracy, metrics?.medium_confidence_accuracy]);
+
   return (
     <main className="page">
       <section className="panel header-panel">
@@ -399,6 +423,33 @@ export default function HomePage() {
               <span className="metric-sub">Sample: {confidenceCounts.low}</span>
             </article>
           </div>
+        </section>
+      ) : null}
+
+
+      {!loading && !error ? (
+        <section className="panel calibration-panel">
+          <h2>Calibration Summary</h2>
+          <div className="calibration-grid">
+            <div className="calibration-row">
+              <span>High Confidence Accuracy</span>
+              <strong>{formatPercent(metrics?.high_confidence_accuracy)}</strong>
+              <span className="metric-sub">Samples: {confidenceCounts.high}</span>
+            </div>
+            <div className="calibration-row">
+              <span>Medium Confidence Accuracy</span>
+              <strong>{formatPercent(metrics?.medium_confidence_accuracy)}</strong>
+              <span className="metric-sub">Samples: {confidenceCounts.medium}</span>
+            </div>
+            <div className="calibration-row">
+              <span>Low Confidence Accuracy</span>
+              <strong>{formatPercent(metrics?.low_confidence_accuracy)}</strong>
+              <span className="metric-sub">Samples: {confidenceCounts.low}</span>
+            </div>
+          </div>
+          <p className={`calibration-indicator ${calibrationStatus.tone}`}>
+            {calibrationStatus.label}
+          </p>
         </section>
       ) : null}
 
