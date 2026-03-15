@@ -49,6 +49,13 @@ export interface HeadToHeadSnapshot {
   avg_goals_h2h: number | null;
 }
 
+export interface MatchIntelligenceSnapshot {
+  expected_goals: number;
+  btts_probability: number;
+  goal_environment: "low" | "medium" | "high";
+  predictability_score: number;
+}
+
 export interface ScoutMatch {
   league: string;
   competition_code: string;
@@ -63,6 +70,7 @@ export interface ScoutMatch {
   home_season_stats?: TeamSeasonStatsSnapshot;
   away_season_stats?: TeamSeasonStatsSnapshot;
   head_to_head?: HeadToHeadSnapshot;
+  intelligence?: MatchIntelligenceSnapshot;
 }
 
 export interface ScoutMatchesResponse {

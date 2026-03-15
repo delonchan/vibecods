@@ -1,5 +1,6 @@
 import {
   HeadToHeadSnapshot,
+  MatchIntelligenceSnapshot,
   ScoutMatch,
   ScoutMatchesResponse,
   TeamFormSnapshot,
@@ -38,6 +39,14 @@ const EMPTY_HEAD_TO_HEAD: HeadToHeadSnapshot = {
   draws: 0,
   avg_goals_h2h: null,
 };
+
+const EMPTY_INTELLIGENCE: MatchIntelligenceSnapshot = {
+  expected_goals: 0,
+  btts_probability: 0,
+  goal_environment: "low",
+  predictability_score: 0,
+};
+
 
 interface FootballDataCompetitionMatchesResponse {
   matches?: Array<{
@@ -336,6 +345,117 @@ function computeHeadToHeadFromMatches(
   };
 }
 
+function average(values: number[]): number {
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function computeFormPoints(form?: TeamFormSnapshot): number {
+  return (form?.last_5_form ?? []).reduce((total, result) => {
+    if (result === "W") {
+      return total + 3;
+    }
+
+    if (result === "D") {
+      return total + 1;
+    }
+
+    return total;
+  }, 0);
+}
+
+function computeBttsRate(form?: TeamFormSnapshot): number {
+  const scored = form?.recent_goals_scored ?? [];
+  const conceded = form?.recent_goals_conceded ?? [];
+  const sampleSize = Math.min(scored.length, conceded.length);
+
+  if (sampleSize === 0) {
+    return 0;
+  }
+
+  let bttsCount = 0;
+
+  for (let index = 0; index < sampleSize; index += 1) {
+    if (scored[index] > 0 && conceded[index] > 0) {
+      bttsCount += 1;
+    }
+  }
+
+  return bttsCount / sampleSize;
+}
+
+function computePredictabilityScore(match: ScoutMatch): number {
+  const positionGap = Math.abs(
+    (match.home_season_stats?.position ?? 0) -
+      (match.away_season_stats?.position ?? 0),
+  );
+  const pointsGap = Math.abs(
+    (match.home_season_stats?.points ?? 0) - (match.away_season_stats?.points ?? 0),
+  );
+  const formGap = Math.abs(
+    computeFormPoints(match.home_form) - computeFormPoints(match.away_form),
+  );
+  const concededGap = Math.abs(
+    average(match.home_form?.recent_goals_conceded ?? []) -
+      average(match.away_form?.recent_goals_conceded ?? []),
+  );
+
+  const positionFactor = clamp(positionGap / 20, 0, 1);
+  const pointsFactor = clamp(pointsGap / 30, 0, 1);
+  const formFactor = clamp(formGap / 15, 0, 1);
+  const concededFactor = clamp(concededGap / 2, 0, 1);
+
+  const weightedScore =
+    positionFactor * 0.35 +
+    pointsFactor * 0.30 +
+    formFactor * 0.20 +
+    concededFactor * 0.15;
+
+  return Math.round(clamp(weightedScore * 100, 0, 100));
+}
+
+function computeMatchIntelligence(match: ScoutMatch): MatchIntelligenceSnapshot {
+  try {
+    const homeAvgScored = average(match.home_form?.recent_goals_scored ?? []);
+    const awayAvgConceded = average(match.away_form?.recent_goals_conceded ?? []);
+    const awayAvgScored = average(match.away_form?.recent_goals_scored ?? []);
+    const homeAvgConceded = average(match.home_form?.recent_goals_conceded ?? []);
+
+    const expectedGoalsRaw =
+      ((homeAvgScored + awayAvgConceded) + (awayAvgScored + homeAvgConceded)) / 2;
+    const expected_goals = Number(expectedGoalsRaw.toFixed(2));
+
+    const homeBttsRate = computeBttsRate(match.home_form);
+    const awayBttsRate = computeBttsRate(match.away_form);
+    const btts_probability = Number((((homeBttsRate + awayBttsRate) / 2) * 100).toFixed(2));
+
+    let goal_environment: MatchIntelligenceSnapshot["goal_environment"] = "low";
+    if (expected_goals > 2.7) {
+      goal_environment = "high";
+    } else if (expected_goals >= 2.0) {
+      goal_environment = "medium";
+    }
+
+    const predictability_score = computePredictabilityScore(match);
+
+    return {
+      expected_goals,
+      btts_probability,
+      goal_environment,
+      predictability_score,
+    };
+  } catch {
+    return EMPTY_INTELLIGENCE;
+  }
+}
+
 async function fetchHeadToHead(
   match: ScheduledMatchBase,
   teamFinishedMatchesCache: Map<number, Promise<FootballDataTeamMatch[]>>,
@@ -395,6 +515,14 @@ async function addEnrichmentToMatch(
     home_season_stats: getSeasonStatsForTeam(match.home_team_id, standingsMap),
     away_season_stats: getSeasonStatsForTeam(match.away_team_id, standingsMap),
     head_to_head: headToHead,
+    intelligence: computeMatchIntelligence({
+      ...match,
+      home_form: homeForm ?? EMPTY_FORM,
+      away_form: awayForm ?? EMPTY_FORM,
+      home_season_stats: getSeasonStatsForTeam(match.home_team_id, standingsMap),
+      away_season_stats: getSeasonStatsForTeam(match.away_team_id, standingsMap),
+      head_to_head: headToHead,
+    }),
   };
 }
 
