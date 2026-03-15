@@ -53,6 +53,8 @@ const EMPTY_INTELLIGENCE: MatchIntelligenceSnapshot = {
   btts_probability: 0,
   goal_environment: "low",
   predictability_score: 0,
+  predicted_result: "draw",
+  confidence_band: "low",
 };
 
 function toPercent(numerator: number, denominator: number): number | null {
@@ -67,43 +69,57 @@ function buildMatchId(match: ScoutMatch): string {
   return `${match.competition_code}-${match.home_team_id}-${match.away_team_id}-${match.match_date}`;
 }
 
-function derivePredictedResult(match: ScoutMatch): PredictedResult | null {
-  const homePoints = match.home_season_stats?.points;
-  const awayPoints = match.away_season_stats?.points;
-
-  if (homePoints !== null && homePoints !== undefined && awayPoints !== null && awayPoints !== undefined) {
-    const pointsGap = homePoints - awayPoints;
-
-    if (Math.abs(pointsGap) <= 2) {
-      return "draw";
+function deriveConfidenceBand(score?: number): ConfidenceBand {
+  if (score !== undefined && score !== null && !Number.isNaN(score)) {
+    if (score >= 70) {
+      return "high";
     }
 
-    return pointsGap > 0 ? "home" : "away";
-  }
-
-  const formGap = computeFormPoints(match.home_form) - computeFormPoints(match.away_form);
-
-  if (Math.abs(formGap) <= 1) {
-    return "draw";
-  }
-
-  return formGap > 0 ? "home" : "away";
-}
-
-function deriveConfidenceBand(score?: number): ConfidenceBand | null {
-  if (score === undefined || score === null || Number.isNaN(score)) {
-    return null;
-  }
-
-  if (score >= 70) {
-    return "high";
-  }
-
-  if (score >= 40) {
-    return "medium";
+    if (score >= 40) {
+      return "medium";
+    }
   }
 
   return "low";
+}
+
+function computeStrengthDelta(match: ScoutMatch): number {
+  const homePosition = match.home_season_stats?.position ?? 0;
+  const awayPosition = match.away_season_stats?.position ?? 0;
+  const homePoints = match.home_season_stats?.points ?? 0;
+  const awayPoints = match.away_season_stats?.points ?? 0;
+  const homeFormPoints = computeFormPoints(match.home_form);
+  const awayFormPoints = computeFormPoints(match.away_form);
+  const homeConcededAvg = average(match.home_form?.recent_goals_conceded ?? []);
+  const awayConcededAvg = average(match.away_form?.recent_goals_conceded ?? []);
+
+  const leaguePositionComponent = (awayPosition - homePosition) * 0.8;
+  const pointsComponent = (homePoints - awayPoints) / 3;
+  const formComponent = (homeFormPoints - awayFormPoints) * 0.9;
+  const concededComponent = (awayConcededAvg - homeConcededAvg) * 5;
+
+  return Number(
+    (
+      leaguePositionComponent +
+      pointsComponent +
+      formComponent +
+      concededComponent
+    ).toFixed(2),
+  );
+}
+
+function derivePredictedResult(match: ScoutMatch): PredictedResult {
+  const delta = computeStrengthDelta(match);
+
+  if (delta > 8) {
+    return "home";
+  }
+
+  if (delta < -8) {
+    return "away";
+  }
+
+  return "draw";
 }
 
 function buildPredictionRecord(match: ScoutMatch): PredictionRecord {
@@ -123,8 +139,8 @@ function buildPredictionRecord(match: ScoutMatch): PredictionRecord {
     btts_probability: intelligence.btts_probability,
     goal_environment: intelligence.goal_environment,
     predictability_score: intelligence.predictability_score,
-    predicted_result: derivePredictedResult(match),
-    confidence_band: deriveConfidenceBand(intelligence.predictability_score),
+    predicted_result: intelligence.predicted_result,
+    confidence_band: intelligence.confidence_band,
     final_home_goals: null,
     final_away_goals: null,
     actual_result: null,
@@ -176,7 +192,7 @@ function evaluatePrediction(record: PredictionRecord): PredictionRecord {
     actual_result: actualResult,
     btts,
     total_goals: totalGoals,
-    correct_result: record.predicted_result === null ? null : record.predicted_result === actualResult,
+    correct_result: record.predicted_result === actualResult,
     correct_btts_signal: predictedBttsSignal === btts,
     correct_goal_environment:
       record.goal_environment === deriveGoalEnvironmentFromTotalGoals(totalGoals),
@@ -585,12 +601,16 @@ function computeMatchIntelligence(match: ScoutMatch): MatchIntelligenceSnapshot 
     }
 
     const predictability_score = computePredictabilityScore(match);
+    const predicted_result = derivePredictedResult(match);
+    const confidence_band = deriveConfidenceBand(predictability_score);
 
     return {
       expected_goals,
       btts_probability,
       goal_environment,
       predictability_score,
+      predicted_result,
+      confidence_band,
     };
   } catch {
     return EMPTY_INTELLIGENCE;

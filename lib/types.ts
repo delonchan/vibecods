@@ -54,6 +54,8 @@ export interface MatchIntelligenceSnapshot {
   btts_probability: number;
   goal_environment: "low" | "medium" | "high";
   predictability_score: number;
+  predicted_result: PredictedResult;
+  confidence_band: ConfidenceBand;
 }
 
 export interface ScoutMatch {
