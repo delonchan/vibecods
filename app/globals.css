@@ -72,6 +72,24 @@ body {
   color: #b8c7ea;
 }
 
+.intelligence-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.compact-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #304266;
+  background: #14243f;
+  color: #d7e5ff;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  font-weight: 600;
+}
+
 .enrichment-grid {
   display: grid;
   gap: 0.75rem;
@@ -94,6 +112,30 @@ body {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.2rem 0;
+}
+
+.env-low {
+  color: #ff6b6b;
+}
+
+.env-medium {
+  color: #ffd166;
+}
+
+.env-high {
+  color: #6ee7a8;
+}
+
+.predictability-low {
+  color: #ff6b6b;
+}
+
+.predictability-medium {
+  color: #ffd166;
+}
+
+.predictability-high {
+  color: #6ee7a8;
 }
 
 .state-panel {

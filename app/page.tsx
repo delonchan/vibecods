@@ -1,6 +1,12 @@
 "use client";
 
-import { ScoutMatch, ScoutMatchesResponse, TeamFormSnapshot, TeamSeasonStatsSnapshot } from "@/lib/types";
+import {
+  MatchIntelligenceSnapshot,
+  ScoutMatch,
+  ScoutMatchesResponse,
+  TeamFormSnapshot,
+  TeamSeasonStatsSnapshot,
+} from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
 function formatForm(form?: TeamFormSnapshot): string {
@@ -38,6 +44,58 @@ function formatDate(value: string): string {
   return date.toLocaleString();
 }
 
+function formatMetric(value: number | null | undefined, suffix = ""): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "N/A";
+  }
+
+  return `${value}${suffix}`;
+}
+
+function getGoalEnvironmentClass(intelligence?: MatchIntelligenceSnapshot): string {
+  const goalEnvironment = intelligence?.goal_environment;
+
+  if (goalEnvironment === "high") {
+    return "env-high";
+  }
+
+  if (goalEnvironment === "medium") {
+    return "env-medium";
+  }
+
+  return "env-low";
+}
+
+function getPredictabilityBand(score?: number): "low" | "medium" | "high" {
+  if (score === undefined || score === null || Number.isNaN(score)) {
+    return "low";
+  }
+
+  if (score >= 70) {
+    return "high";
+  }
+
+  if (score >= 40) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getPredictabilityClass(score?: number): string {
+  const band = getPredictabilityBand(score);
+
+  if (band === "high") {
+    return "predictability-high";
+  }
+
+  if (band === "medium") {
+    return "predictability-medium";
+  }
+
+  return "predictability-low";
+}
+
 function MatchCard({ match }: { match: ScoutMatch }) {
   const homeStats = formatSeasonStats(match.home_season_stats);
   const awayStats = formatSeasonStats(match.away_season_stats);
@@ -55,6 +113,25 @@ function MatchCard({ match }: { match: ScoutMatch }) {
         </div>
         <div className="badge">{formatDate(match.match_date)}</div>
       </header>
+
+      <div className="intelligence-compact" aria-label="compact-intelligence-summary">
+        <span className="compact-pill">
+          xG: {formatMetric(match.intelligence?.expected_goals)}
+        </span>
+        <span className="compact-pill">
+          BTTS: {formatMetric(match.intelligence?.btts_probability, "%")}
+        </span>
+        <span className={`compact-pill ${getGoalEnvironmentClass(match.intelligence)}`}>
+          Env: {match.intelligence?.goal_environment?.toUpperCase() ?? "N/A"}
+        </span>
+        <span
+          className={`compact-pill ${getPredictabilityClass(
+            match.intelligence?.predictability_score,
+          )}`}
+        >
+          Predictability: {formatMetric(match.intelligence?.predictability_score)}
+        </span>
+      </div>
 
       <p className="meta-line">Venue: {match.venue ?? "TBD"}</p>
 
@@ -121,7 +198,40 @@ function MatchCard({ match }: { match: ScoutMatch }) {
           </div>
           <div className="stat-row">
             <span>Avg goals (H2H)</span>
-            <strong>{match.head_to_head?.avg_goals_h2h ?? "N/A"}</strong>
+            <strong>{formatMetric(match.head_to_head?.avg_goals_h2h)}</strong>
+          </div>
+        </section>
+
+        <section className="enrichment-card">
+          <h4>Match Intelligence</h4>
+          <div className="stat-row">
+            <span>Expected Goals</span>
+            <strong>{formatMetric(match.intelligence?.expected_goals)}</strong>
+          </div>
+          <div className="stat-row">
+            <span>BTTS Probability</span>
+            <strong>{formatMetric(match.intelligence?.btts_probability, "%")}</strong>
+          </div>
+          <div className="stat-row">
+            <span>Goal Environment</span>
+            <strong className={getGoalEnvironmentClass(match.intelligence)}>
+              {match.intelligence?.goal_environment?.toUpperCase() ?? "N/A"}
+            </strong>
+          </div>
+          <div className="stat-row">
+            <span>Predictability Score</span>
+            <strong className={getPredictabilityClass(match.intelligence?.predictability_score)}>
+              {formatMetric(match.intelligence?.predictability_score)}
+            </strong>
+          </div>
+          <div className="stat-row">
+            <span>Predictability Band</span>
+            <strong className={getPredictabilityClass(match.intelligence?.predictability_score)}>
+              {match.intelligence?.predictability_score === null ||
+              match.intelligence?.predictability_score === undefined
+                ? "N/A"
+                : getPredictabilityBand(match.intelligence.predictability_score).toUpperCase()}
+            </strong>
           </div>
         </section>
       </div>
