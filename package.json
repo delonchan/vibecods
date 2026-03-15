@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "scout:refresh": "tsx scripts/refreshPredictions.ts",
+    "scout:reconcile": "tsx scripts/reconcileResults.ts"
   },
   "dependencies": {
     "next": "14.2.5",
@@ -19,6 +21,7 @@
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "eslint": "8.57.0",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "14.2.5",
+    "tsx": "4.20.5"
   }
 }
