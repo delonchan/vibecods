@@ -11,6 +11,8 @@ import {
   ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
+  PredictionEvaluationRefreshSummary,
+  UpcomingPredictionRefreshSummary,
 } from "@/lib/types";
 
 const FOOTBALL_DATA_BASE_URL =
@@ -860,5 +862,35 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
 
   return {
     matches: sortedMatches,
+  };
+}
+
+
+export async function refreshUpcomingPredictions(): Promise<UpcomingPredictionRefreshSummary> {
+  const beforeCount = (await readPredictionRecords()).length;
+  const scoutData = await getScoutMatchesData();
+  const afterCount = (await readPredictionRecords()).length;
+
+  return {
+    generated_at: new Date().toISOString(),
+    upcoming_matches: scoutData.matches.length,
+    new_predictions_stored: Math.max(afterCount - beforeCount, 0),
+  };
+}
+
+export async function refreshCompletedPredictionEvaluations(): Promise<PredictionEvaluationRefreshSummary> {
+  const before = await readPredictionRecords();
+  const beforeCompleted = before.filter((record) => record.completed_at !== null).length;
+
+  await reconcileCompletedPredictions();
+
+  const after = await readPredictionRecords();
+  const afterCompleted = after.filter((record) => record.completed_at !== null).length;
+  const metrics = await getPredictionMetrics();
+
+  return {
+    refreshed_at: new Date().toISOString(),
+    newly_completed_predictions: Math.max(afterCompleted - beforeCompleted, 0),
+    evaluated_sample_size: metrics.sample_size,
   };
 }

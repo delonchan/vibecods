@@ -116,3 +116,15 @@ export interface ScoutPredictionMetrics {
   low_confidence_accuracy: number | null;
   last_20_accuracy: number | null;
 }
+
+export interface UpcomingPredictionRefreshSummary {
+  generated_at: string;
+  upcoming_matches: number;
+  new_predictions_stored: number;
+}
+
+export interface PredictionEvaluationRefreshSummary {
+  refreshed_at: string;
+  newly_completed_predictions: number;
+  evaluated_sample_size: number;
+}
