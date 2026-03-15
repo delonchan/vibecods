@@ -1,8 +1,14 @@
+import { appendPredictionRecords, readPredictionRecords, writePredictionRecords } from "@/lib/predictionStore";
 import {
+  ActualResult,
+  ConfidenceBand,
   HeadToHeadSnapshot,
   MatchIntelligenceSnapshot,
+  PredictionRecord,
+  PredictedResult,
   ScoutMatch,
   ScoutMatchesResponse,
+  ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
 } from "@/lib/types";
@@ -46,6 +52,139 @@ const EMPTY_INTELLIGENCE: MatchIntelligenceSnapshot = {
   goal_environment: "low",
   predictability_score: 0,
 };
+
+function toPercent(numerator: number, denominator: number): number | null {
+  if (denominator === 0) {
+    return null;
+  }
+
+  return Number(((numerator / denominator) * 100).toFixed(2));
+}
+
+function buildMatchId(match: ScoutMatch): string {
+  return `${match.competition_code}-${match.home_team_id}-${match.away_team_id}-${match.match_date}`;
+}
+
+function derivePredictedResult(match: ScoutMatch): PredictedResult | null {
+  const homePoints = match.home_season_stats?.points;
+  const awayPoints = match.away_season_stats?.points;
+
+  if (homePoints !== null && homePoints !== undefined && awayPoints !== null && awayPoints !== undefined) {
+    const pointsGap = homePoints - awayPoints;
+
+    if (Math.abs(pointsGap) <= 2) {
+      return "draw";
+    }
+
+    return pointsGap > 0 ? "home" : "away";
+  }
+
+  const formGap = computeFormPoints(match.home_form) - computeFormPoints(match.away_form);
+
+  if (Math.abs(formGap) <= 1) {
+    return "draw";
+  }
+
+  return formGap > 0 ? "home" : "away";
+}
+
+function deriveConfidenceBand(score?: number): ConfidenceBand | null {
+  if (score === undefined || score === null || Number.isNaN(score)) {
+    return null;
+  }
+
+  if (score >= 70) {
+    return "high";
+  }
+
+  if (score >= 40) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function buildPredictionRecord(match: ScoutMatch): PredictionRecord {
+  const intelligence = match.intelligence ?? EMPTY_INTELLIGENCE;
+
+  return {
+    match_id: buildMatchId(match),
+    league: match.league,
+    competition_code: match.competition_code,
+    home_team: match.home_team,
+    away_team: match.away_team,
+    home_team_id: match.home_team_id,
+    away_team_id: match.away_team_id,
+    match_date: match.match_date,
+    generated_at: new Date().toISOString(),
+    expected_goals: intelligence.expected_goals,
+    btts_probability: intelligence.btts_probability,
+    goal_environment: intelligence.goal_environment,
+    predictability_score: intelligence.predictability_score,
+    predicted_result: derivePredictedResult(match),
+    confidence_band: deriveConfidenceBand(intelligence.predictability_score),
+    final_home_goals: null,
+    final_away_goals: null,
+    actual_result: null,
+    btts: null,
+    total_goals: null,
+    completed_at: null,
+    correct_result: null,
+    correct_btts_signal: null,
+    correct_goal_environment: null,
+  };
+}
+
+function deriveActualResult(homeGoals: number, awayGoals: number): ActualResult {
+  if (homeGoals > awayGoals) {
+    return "home";
+  }
+
+  if (awayGoals > homeGoals) {
+    return "away";
+  }
+
+  return "draw";
+}
+
+function deriveGoalEnvironmentFromTotalGoals(totalGoals: number): "low" | "medium" | "high" {
+  if (totalGoals > 2.7) {
+    return "high";
+  }
+
+  if (totalGoals >= 2.0) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function evaluatePrediction(record: PredictionRecord): PredictionRecord {
+  if (record.final_home_goals === null || record.final_away_goals === null) {
+    return record;
+  }
+
+  const actualResult = deriveActualResult(record.final_home_goals, record.final_away_goals);
+  const totalGoals = record.final_home_goals + record.final_away_goals;
+  const btts = record.final_home_goals > 0 && record.final_away_goals > 0;
+  const predictedBttsSignal = record.btts_probability >= 50;
+
+  return {
+    ...record,
+    actual_result: actualResult,
+    btts,
+    total_goals: totalGoals,
+    correct_result: record.predicted_result === null ? null : record.predicted_result === actualResult,
+    correct_btts_signal: predictedBttsSignal === btts,
+    correct_goal_environment:
+      record.goal_environment === deriveGoalEnvironmentFromTotalGoals(totalGoals),
+  };
+}
+
+async function persistPredictionsForMatches(matches: ScoutMatch[]): Promise<void> {
+  const records = matches.map(buildPredictionRecord);
+  await appendPredictionRecords(records);
+}
 
 
 interface FootballDataCompetitionMatchesResponse {
@@ -526,6 +665,128 @@ async function addEnrichmentToMatch(
   };
 }
 
+async function fetchFinishedMatchForPrediction(
+  prediction: PredictionRecord,
+): Promise<{ homeGoals: number; awayGoals: number; completedAt: string } | null> {
+  try {
+    const payload =
+      await fetchFootballDataJson<FootballDataCompetitionMatchesResponse>(
+        `/competitions/${prediction.competition_code}/matches`,
+      );
+
+    const target = (payload.matches ?? []).find((match) => {
+      if (match.status !== "FINISHED") {
+        return false;
+      }
+
+      return (
+        match.homeTeam.id === prediction.home_team_id &&
+        match.awayTeam.id === prediction.away_team_id &&
+        match.utcDate === prediction.match_date
+      );
+    });
+
+    if (!target) {
+      return null;
+    }
+
+    const teamPayload = await fetchFootballDataJson<FootballDataTeamMatchesResponse>(
+      `/teams/${prediction.home_team_id}/matches?status=FINISHED&limit=20`,
+    );
+
+    const teamMatch = (teamPayload.matches ?? []).find(
+      (match) =>
+        match.homeTeam.id === prediction.home_team_id &&
+        match.awayTeam.id === prediction.away_team_id &&
+        match.utcDate === prediction.match_date &&
+        match.status === "FINISHED",
+    );
+
+    const homeGoals = teamMatch?.score?.fullTime?.home;
+    const awayGoals = teamMatch?.score?.fullTime?.away;
+
+    if (homeGoals === null || homeGoals === undefined || awayGoals === null || awayGoals === undefined) {
+      return null;
+    }
+
+    return {
+      homeGoals,
+      awayGoals,
+      completedAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function reconcileCompletedPredictions(): Promise<void> {
+  const records = await readPredictionRecords();
+  const pending = records.filter((record) => record.completed_at === null);
+
+  if (!pending.length) {
+    return;
+  }
+
+  const updated = [...records];
+
+  await Promise.all(
+    pending.map(async (record) => {
+      const result = await fetchFinishedMatchForPrediction(record);
+
+      if (!result) {
+        return;
+      }
+
+      const index = updated.findIndex((item) => item.match_id === record.match_id);
+
+      if (index < 0) {
+        return;
+      }
+
+      const merged: PredictionRecord = {
+        ...updated[index],
+        final_home_goals: result.homeGoals,
+        final_away_goals: result.awayGoals,
+        completed_at: result.completedAt,
+      };
+
+      updated[index] = evaluatePrediction(merged);
+    }),
+  );
+
+  await writePredictionRecords(updated);
+}
+
+export async function getPredictionMetrics(): Promise<ScoutPredictionMetrics> {
+  const records = await readPredictionRecords();
+  const completed = records.filter((record) => record.correct_result !== null);
+
+  const accuracyFor = (subset: PredictionRecord[]): number | null => {
+    const decided = subset.filter((item) => item.correct_result !== null);
+
+    if (!decided.length) {
+      return null;
+    }
+
+    const correct = decided.filter((item) => item.correct_result === true).length;
+    return toPercent(correct, decided.length);
+  };
+
+  const high = completed.filter((record) => record.confidence_band === "high");
+  const medium = completed.filter((record) => record.confidence_band === "medium");
+  const low = completed.filter((record) => record.confidence_band === "low");
+  const last20 = completed.slice(-20);
+
+  return {
+    overall_accuracy: accuracyFor(completed),
+    sample_size: completed.length,
+    high_confidence_accuracy: accuracyFor(high),
+    medium_confidence_accuracy: accuracyFor(medium),
+    low_confidence_accuracy: accuracyFor(low),
+    last_20_accuracy: accuracyFor(last20),
+  };
+}
+
 export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   if (!FOOTBALL_DATA_API_KEY) {
     throw new Error("FOOTBALL_DATA_API_KEY is required.");
@@ -590,10 +851,14 @@ export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
     ),
   );
 
+  const sortedMatches = matchesWithEnrichment.sort(
+    (a, b) =>
+      new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
+  );
+
+  await persistPredictionsForMatches(sortedMatches);
+
   return {
-    matches: matchesWithEnrichment.sort(
-      (a, b) =>
-        new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
-    ),
+    matches: sortedMatches,
   };
 }

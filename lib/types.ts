@@ -76,3 +76,43 @@ export interface ScoutMatch {
 export interface ScoutMatchesResponse {
   matches: ScoutMatch[];
 }
+
+export type PredictedResult = "home" | "draw" | "away";
+export type ConfidenceBand = "low" | "medium" | "high";
+export type ActualResult = "home" | "draw" | "away";
+
+export interface PredictionRecord {
+  match_id: string;
+  league: string;
+  competition_code: string;
+  home_team: string;
+  away_team: string;
+  home_team_id: number;
+  away_team_id: number;
+  match_date: string;
+  generated_at: string;
+  expected_goals: number;
+  btts_probability: number;
+  goal_environment: "low" | "medium" | "high";
+  predictability_score: number;
+  predicted_result: PredictedResult | null;
+  confidence_band: ConfidenceBand | null;
+  final_home_goals: number | null;
+  final_away_goals: number | null;
+  actual_result: ActualResult | null;
+  btts: boolean | null;
+  total_goals: number | null;
+  completed_at: string | null;
+  correct_result: boolean | null;
+  correct_btts_signal: boolean | null;
+  correct_goal_environment: boolean | null;
+}
+
+export interface ScoutPredictionMetrics {
+  overall_accuracy: number | null;
+  sample_size: number;
+  high_confidence_accuracy: number | null;
+  medium_confidence_accuracy: number | null;
+  low_confidence_accuracy: number | null;
+  last_20_accuracy: number | null;
+}
