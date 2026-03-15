@@ -18,7 +18,8 @@ import {
 const FOOTBALL_DATA_BASE_URL =
   process.env.FOOTBALL_DATA_BASE_URL ?? "https://api.football-data.org/v4";
 const FOOTBALL_DATA_API_KEY = process.env.FOOTBALL_DATA_API_KEY;
-const MODEL_VERSION = "v1-strength-delta";
+const MODEL_VERSION = "v1.1-strength-delta-home-advantage";
+const HOME_ADVANTAGE_BONUS = 1.25;
 
 const COMPETITIONS = [
   { code: "PL", league: "Premier League" },
@@ -99,12 +100,22 @@ function computeStrengthDelta(match: ScoutMatch): number {
   const formComponent = (homeFormPoints - awayFormPoints) * 0.9;
   const concededComponent = (awayConcededAvg - homeConcededAvg) * 5;
 
+  // Strength delta formula (deterministic):
+  // (league position signal) + (points signal) + (recent form signal)
+  // + (defensive signal) + (fixed home advantage bonus)
+  //
+  // delta = 0.8*(awayPos-homePos)
+  //       + (homePts-awayPts)/3
+  //       + 0.9*(homeFormPts-awayFormPts)
+  //       + 5*(awayConcededAvg-homeConcededAvg)
+  //       + HOME_ADVANTAGE_BONUS
   return Number(
     (
       leaguePositionComponent +
       pointsComponent +
       formComponent +
-      concededComponent
+      concededComponent +
+      HOME_ADVANTAGE_BONUS
     ).toFixed(2),
   );
 }
