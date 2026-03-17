@@ -1,5 +1,11 @@
-import { getScoutMatchesData, isSupportedLeagueCode } from "@/lib/footballData";
+import { getScoutMatchesData } from "@/lib/footballData";
 import { NextRequest, NextResponse } from "next/server";
+
+const ALLOWED_LEAGUES = ["PL", "PD", "BL1", "SA", "CL"] as const;
+
+function isSupportedLeagueCode(value: string): value is (typeof ALLOWED_LEAGUES)[number] {
+  return ALLOWED_LEAGUES.includes(value as (typeof ALLOWED_LEAGUES)[number]);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,8 +14,7 @@ export async function GET(request: NextRequest) {
     if (!league || !isSupportedLeagueCode(league)) {
       return NextResponse.json(
         {
-          error:
-            "A valid league query is required. Allowed: PL, PD, BL1, SA, CL.",
+          error: "A valid league query is required. Allowed: PL, PD, BL1, SA, CL.",
           matches: [],
         },
         { status: 400 },
@@ -17,16 +22,6 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await getScoutMatchesData(league);
-<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
-=======
-import { getScoutMatchesData } from "@/lib/footballData";
-import { NextResponse } from "next/server";
-
-export async function GET() {
-  try {
-    const data = await getScoutMatchesData();
->>>>>>> main
-
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
     const message =
