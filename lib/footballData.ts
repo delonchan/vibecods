@@ -9,6 +9,7 @@ import {
   LeagueCode,
   ScoutLeagueResponse,
   ScoutMatch,
+  ScoutMatchesResponse,
   ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
@@ -831,11 +832,25 @@ export async function getPredictionMetrics(): Promise<ScoutPredictionMetrics> {
   };
 }
 
+export async function getScoutMatchesData(): Promise<ScoutMatchesResponse>;
 export async function getScoutMatchesData(
   leagueCode: LeagueCode,
-): Promise<ScoutLeagueResponse> {
+): Promise<ScoutLeagueResponse>;
+export async function getScoutMatchesData(
+  leagueCode?: LeagueCode,
+): Promise<ScoutLeagueResponse | ScoutMatchesResponse> {
   if (!FOOTBALL_DATA_API_KEY) {
     throw new Error("FOOTBALL_DATA_API_KEY is required.");
+  }
+
+  if (!leagueCode) {
+    const leagueData = await Promise.all(
+      LEAGUE_OPTIONS.map(async (league) => getScoutMatchesData(league.code)),
+    );
+
+    return {
+      matches: leagueData.flatMap((entry) => entry.matches),
+    };
   }
 
   const leagueName = getLeagueNameByCode(leagueCode);
