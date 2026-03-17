@@ -49,10 +49,13 @@ export interface HeadToHeadSnapshot {
   avg_goals_h2h: number | null;
 }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
 export type PredictedResult = "home" | "draw" | "away";
 export type ConfidenceBand = "low" | "medium" | "high";
 export type ActualResult = "home" | "draw" | "away";
 
+=======
+>>>>>>> main
 export interface MatchIntelligenceSnapshot {
   expected_goals: number;
   btts_probability: number;
@@ -83,6 +86,7 @@ export interface ScoutMatchesResponse {
   matches: ScoutMatch[];
 }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
 export type LeagueCode = "PL" | "PD" | "BL1" | "SA" | "CL";
 
 export interface ScoutLeagueResponse {
@@ -91,6 +95,11 @@ export interface ScoutLeagueResponse {
   last_updated: string;
   matches: ScoutMatch[];
 }
+=======
+export type PredictedResult = "home" | "draw" | "away";
+export type ConfidenceBand = "low" | "medium" | "high";
+export type ActualResult = "home" | "draw" | "away";
+>>>>>>> main
 
 export interface PredictionRecord {
   match_id: string;

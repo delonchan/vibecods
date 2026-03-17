@@ -3,8 +3,13 @@
 import {
   MatchIntelligenceSnapshot,
   PredictionRecord,
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
   ScoutLeagueResponse,
   ScoutMatch,
+=======
+  ScoutMatch,
+  ScoutMatchesResponse,
+>>>>>>> main
   ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
@@ -16,6 +21,7 @@ interface ScoutHistoryResponse {
   error?: string;
 }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
 type LeagueCode = "PL" | "PD" | "BL1" | "SA" | "CL";
 
 const LEAGUE_OPTIONS: Array<{ code: LeagueCode; name: string }> = [
@@ -28,6 +34,8 @@ const LEAGUE_OPTIONS: Array<{ code: LeagueCode; name: string }> = [
 
 const LOADED_LEAGUES_STORAGE_KEY = "scout.loadedLeagues.v1";
 
+=======
+>>>>>>> main
 function formatForm(form?: TeamFormSnapshot): string {
   if (!form?.last_5_form?.length) {
     return "N/A";
@@ -266,6 +274,7 @@ function MatchCard({ match }: { match: ScoutMatch }) {
 }
 
 export default function HomePage() {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
   const [selectedLeague, setSelectedLeague] = useState<LeagueCode>("PL");
   const [loadedLeagues, setLoadedLeagues] = useState<Record<string, ScoutLeagueResponse>>({});
   const [metrics, setMetrics] = useState<ScoutPredictionMetrics | null>(null);
@@ -294,25 +303,54 @@ export default function HomePage() {
   useEffect(() => {
     localStorage.setItem(LOADED_LEAGUES_STORAGE_KEY, JSON.stringify(loadedLeagues));
   }, [loadedLeagues]);
+=======
+  const [matches, setMatches] = useState<ScoutMatch[]>([]);
+  const [metrics, setMetrics] = useState<ScoutPredictionMetrics | null>(null);
+  const [history, setHistory] = useState<PredictionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+>>>>>>> main
 
   useEffect(() => {
     let active = true;
 
     async function loadDashboard() {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       setLoadingDashboard(true);
       setError(null);
 
       try {
         const [metricsResponse, historyResponse] = await Promise.all([
+=======
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [matchesResponse, metricsResponse, historyResponse] = await Promise.all([
+          fetch("/api/scout", { cache: "no-store" }),
+>>>>>>> main
           fetch("/api/scout/metrics", { cache: "no-store" }),
           fetch("/api/scout/history", { cache: "no-store" }),
         ]);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
+        const matchesPayload = (await matchesResponse.json()) as ScoutMatchesResponse & {
+          error?: string;
+        };
+>>>>>>> main
         const metricsPayload = (await metricsResponse.json()) as ScoutPredictionMetrics & {
           error?: string;
         };
         const historyPayload = (await historyResponse.json()) as ScoutHistoryResponse;
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
+        if (!matchesResponse.ok) {
+          throw new Error(matchesPayload.error ?? "Unable to load scouting data.");
+        }
+
+>>>>>>> main
         if (!metricsResponse.ok) {
           throw new Error(metricsPayload.error ?? "Unable to load scouting metrics.");
         }
@@ -325,6 +363,10 @@ export default function HomePage() {
           return;
         }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
+        setMatches(matchesPayload.matches ?? []);
+>>>>>>> main
         setMetrics(metricsPayload);
         setHistory(historyPayload.history ?? []);
       } catch (loadError) {
@@ -339,7 +381,11 @@ export default function HomePage() {
         );
       } finally {
         if (active) {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
           setLoadingDashboard(false);
+=======
+          setLoading(false);
+>>>>>>> main
         }
       }
     }
@@ -351,6 +397,7 @@ export default function HomePage() {
     };
   }, []);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
   async function handleLoadLeague() {
     setLoadingLeague(true);
     setLeagueError(null);
@@ -381,6 +428,8 @@ export default function HomePage() {
     }
   }
 
+=======
+>>>>>>> main
   const completedHistory = useMemo(
     () => history.filter((record) => record.correct_result !== null),
     [history],
@@ -400,6 +449,7 @@ export default function HomePage() {
 
   const historyRows = useMemo(() => [...history].reverse().slice(0, 50), [history]);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
   const loadedLeagueEntries = useMemo(
     () => Object.values(loadedLeagues),
     [loadedLeagues],
@@ -415,6 +465,13 @@ export default function HomePage() {
     if (error) return "Dashboard data unavailable";
     return "Upcoming Match Scout Board";
   }, [loadingDashboard, error]);
+=======
+  const titleText = useMemo(() => {
+    if (loading) return "Loading scouting data...";
+    if (error) return "Scouting data unavailable";
+    return "Upcoming Match Scout Board";
+  }, [loading, error]);
+>>>>>>> main
 
   const calibrationStatus = useMemo(() => {
     const high = metrics?.high_confidence_accuracy;
@@ -447,6 +504,7 @@ export default function HomePage() {
         <p>{titleText}</p>
       </section>
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       <section className="panel">
         <h2>Load League Scouting Data</h2>
         <div className="stat-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -474,12 +532,23 @@ export default function HomePage() {
       ) : null}
 
       {!loadingDashboard && error ? (
+=======
+      {loading ? (
+        <section className="panel state-panel">Loading matches, metrics and history…</section>
+      ) : null}
+
+      {!loading && error ? (
+>>>>>>> main
         <section className="panel state-panel error-panel">
           Failed to load dashboard data: {error}
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       {!loadingDashboard && !error ? (
+=======
+      {!loading && !error ? (
+>>>>>>> main
         <section className="panel metrics-panel">
           <h2>Prediction Metrics</h2>
           <div className="metrics-grid">
@@ -514,7 +583,12 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       {!loadingDashboard && !error ? (
+=======
+
+      {!loading && !error ? (
+>>>>>>> main
         <section className="panel calibration-panel">
           <h2>Calibration Summary</h2>
           <div className="calibration-grid">
@@ -540,7 +614,11 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       {!loadingDashboard && !error ? (
+=======
+      {!loading && !error ? (
+>>>>>>> main
         <section className="panel history-panel">
           <h2>Prediction History</h2>
           {historyRows.length === 0 ? (
@@ -590,6 +668,7 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
       {loadedLeagueEntries.length === 0 ? (
         <section className="panel state-panel">
           Select a league and click Load League to view scouting data.
@@ -619,6 +698,25 @@ export default function HomePage() {
           ))}
         </section>
       )}
+=======
+      {!loading && !error && matches.length === 0 ? (
+        <section className="panel state-panel">No upcoming scheduled matches in the next 48 hours.</section>
+      ) : null}
+
+      {!loading && !error && matches.length > 0 ? (
+        <section className="panel players-panel">
+          <h2>Upcoming Matches ({matches.length})</h2>
+          <div className="cards-grid">
+            {matches.map((match) => (
+              <MatchCard
+                key={`${match.competition_code}-${match.home_team_id}-${match.away_team_id}-${match.match_date}`}
+                match={match}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+>>>>>>> main
     </main>
   );
 }

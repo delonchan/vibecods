@@ -6,8 +6,6 @@ import {
   MatchIntelligenceSnapshot,
   PredictionRecord,
   PredictedResult,
-  LeagueCode,
-  ScoutLeagueResponse,
   ScoutMatch,
   ScoutMatchesResponse,
   ScoutPredictionMetrics,
@@ -23,13 +21,13 @@ const FOOTBALL_DATA_API_KEY = process.env.FOOTBALL_DATA_API_KEY;
 const MODEL_VERSION = "v1.1-strength-delta-home-advantage";
 const HOME_ADVANTAGE_BONUS = 1.25;
 
-const LEAGUE_OPTIONS: ReadonlyArray<{ code: LeagueCode; league: string }> = [
+const COMPETITIONS = [
   { code: "PL", league: "Premier League" },
   { code: "SA", league: "Serie A" },
   { code: "PD", league: "La Liga" },
   { code: "BL1", league: "Bundesliga" },
   { code: "CL", league: "Champions League" },
-];
+] as const;
 
 const EMPTY_FORM: TeamFormSnapshot = {
   last_5_form: [],
@@ -67,14 +65,6 @@ function toPercent(numerator: number, denominator: number): number | null {
   }
 
   return Number(((numerator / denominator) * 100).toFixed(2));
-}
-
-export function isSupportedLeagueCode(value: string): value is LeagueCode {
-  return LEAGUE_OPTIONS.some((entry) => entry.code === value);
-}
-
-export function getLeagueNameByCode(code: LeagueCode): string {
-  return LEAGUE_OPTIONS.find((entry) => entry.code === code)?.league ?? code;
 }
 
 function buildMatchId(match: ScoutMatch): string {
@@ -832,32 +822,55 @@ export async function getPredictionMetrics(): Promise<ScoutPredictionMetrics> {
   };
 }
 
-export async function getScoutMatchesData(): Promise<ScoutMatchesResponse>;
-export async function getScoutMatchesData(
-  leagueCode: LeagueCode,
-): Promise<ScoutLeagueResponse>;
-export async function getScoutMatchesData(
-  leagueCode?: LeagueCode,
-): Promise<ScoutLeagueResponse | ScoutMatchesResponse> {
+export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
   if (!FOOTBALL_DATA_API_KEY) {
     throw new Error("FOOTBALL_DATA_API_KEY is required.");
   }
 
-  if (!leagueCode) {
-    const leagueData = await Promise.all(
-      LEAGUE_OPTIONS.map(async (league) => getScoutMatchesData(league.code)),
-    );
+  const results = await Promise.all(
+    COMPETITIONS.map(async (competition) => {
+      try {
+        const result = await fetchCompetitionMatches(
+          competition.code,
+          competition.league,
+        );
 
-    return {
-      matches: leagueData.flatMap((entry) => entry.matches),
-    };
+        return {
+          code: competition.code,
+          ...result,
+        };
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : `Unknown error for ${competition.code}`,
+          code: competition.code,
+        };
+      }
+    }),
+  );
+
+  const scheduledMatches: ScheduledMatchBase[] = [];
+  const standingsByCompetition = new Map<
+    string,
+    Map<number, TeamSeasonStatsSnapshot>
+  >();
+  const errors: string[] = [];
+
+  for (const result of results) {
+    if ("matches" in result && "standingsMap" in result) {
+      scheduledMatches.push(...result.matches);
+      standingsByCompetition.set(result.code, result.standingsMap);
+      continue;
+    }
+
+    errors.push(`${result.code}: ${result.error}`);
   }
 
-  const leagueName = getLeagueNameByCode(leagueCode);
-
-  const competitionResult = await fetchCompetitionMatches(leagueCode, leagueName);
-  const scheduledMatches = competitionResult.matches;
-  const standingsMap = competitionResult.standingsMap;
+  if (scheduledMatches.length === 0 && errors.length > 0) {
+    throw new Error(`Unable to fetch matches. ${errors.join(" | ")}`);
+  }
 
   const teamFormCache = new Map<number, Promise<TeamFormSnapshot>>();
   const teamFinishedMatchesCache = new Map<number, Promise<FootballDataTeamMatch[]>>();
@@ -867,7 +880,7 @@ export async function getScoutMatchesData(
       addEnrichmentToMatch(
         match,
         teamFormCache,
-        standingsMap,
+        standingsByCompetition.get(match.competition_code) ?? new Map(),
         teamFinishedMatchesCache,
       ),
     ),
@@ -881,9 +894,6 @@ export async function getScoutMatchesData(
   await persistPredictionsForMatches(sortedMatches);
 
   return {
-    league_code: leagueCode,
-    league_name: leagueName,
-    last_updated: new Date().toISOString(),
     matches: sortedMatches,
   };
 }
@@ -891,19 +901,13 @@ export async function getScoutMatchesData(
 
 export async function refreshUpcomingPredictions(): Promise<UpcomingPredictionRefreshSummary> {
   const beforeCount = (await readPredictionRecords()).length;
-  let upcomingMatches = 0;
-
-  for (const league of LEAGUE_OPTIONS) {
-    const scoutData = await getScoutMatchesData(league.code);
-    upcomingMatches += scoutData.matches.length;
-  }
-
+  const scoutData = await getScoutMatchesData();
   const afterCount = (await readPredictionRecords()).length;
 
   return {
     generated_at: new Date().toISOString(),
     model_version: MODEL_VERSION,
-    upcoming_matches: upcomingMatches,
+    upcoming_matches: scoutData.matches.length,
     new_predictions_stored: Math.max(afterCount - beforeCount, 0),
   };
 }
