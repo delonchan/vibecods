@@ -1,3 +1,22 @@
+import { getScoutMatchesData, isSupportedLeagueCode } from "@/lib/footballData";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(request: NextRequest) {
+  try {
+    const league = request.nextUrl.searchParams.get("league");
+
+    if (!league || !isSupportedLeagueCode(league)) {
+      return NextResponse.json(
+        {
+          error:
+            "A valid league query is required. Allowed: PL, PD, BL1, SA, CL.",
+          matches: [],
+        },
+        { status: 400 },
+      );
+    }
+
+    const data = await getScoutMatchesData(league);
 import { getScoutMatchesData } from "@/lib/footballData";
 import { NextResponse } from "next/server";
 
