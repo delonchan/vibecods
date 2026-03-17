@@ -3,8 +3,13 @@
 import {
   MatchIntelligenceSnapshot,
   PredictionRecord,
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+  ScoutLeagueResponse,
+  ScoutMatch,
+=======
   ScoutMatch,
   ScoutMatchesResponse,
+>>>>>>> main
   ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
@@ -16,6 +21,21 @@ interface ScoutHistoryResponse {
   error?: string;
 }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+type LeagueCode = "PL" | "PD" | "BL1" | "SA" | "CL";
+
+const LEAGUE_OPTIONS: Array<{ code: LeagueCode; name: string }> = [
+  { code: "PL", name: "Premier League" },
+  { code: "PD", name: "La Liga" },
+  { code: "BL1", name: "Bundesliga" },
+  { code: "SA", name: "Serie A" },
+  { code: "CL", name: "Champions League" },
+];
+
+const LOADED_LEAGUES_STORAGE_KEY = "scout.loadedLeagues.v1";
+
+=======
+>>>>>>> main
 function formatForm(form?: TeamFormSnapshot): string {
   if (!form?.last_5_form?.length) {
     return "N/A";
@@ -254,38 +274,83 @@ function MatchCard({ match }: { match: ScoutMatch }) {
 }
 
 export default function HomePage() {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+  const [selectedLeague, setSelectedLeague] = useState<LeagueCode>("PL");
+  const [loadedLeagues, setLoadedLeagues] = useState<Record<string, ScoutLeagueResponse>>({});
+  const [metrics, setMetrics] = useState<ScoutPredictionMetrics | null>(null);
+  const [history, setHistory] = useState<PredictionRecord[]>([]);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [loadingLeague, setLoadingLeague] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [leagueError, setLeagueError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const persisted = localStorage.getItem(LOADED_LEAGUES_STORAGE_KEY);
+      if (!persisted) {
+        return;
+      }
+
+      const parsed = JSON.parse(persisted) as Record<string, ScoutLeagueResponse>;
+      if (parsed && typeof parsed === "object") {
+        setLoadedLeagues(parsed);
+      }
+    } catch {
+      localStorage.removeItem(LOADED_LEAGUES_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(LOADED_LEAGUES_STORAGE_KEY, JSON.stringify(loadedLeagues));
+  }, [loadedLeagues]);
+=======
   const [matches, setMatches] = useState<ScoutMatch[]>([]);
   const [metrics, setMetrics] = useState<ScoutPredictionMetrics | null>(null);
   const [history, setHistory] = useState<PredictionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+>>>>>>> main
 
   useEffect(() => {
     let active = true;
 
     async function loadDashboard() {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      setLoadingDashboard(true);
+      setError(null);
+
+      try {
+        const [metricsResponse, historyResponse] = await Promise.all([
+=======
       setLoading(true);
       setError(null);
 
       try {
         const [matchesResponse, metricsResponse, historyResponse] = await Promise.all([
           fetch("/api/scout", { cache: "no-store" }),
+>>>>>>> main
           fetch("/api/scout/metrics", { cache: "no-store" }),
           fetch("/api/scout/history", { cache: "no-store" }),
         ]);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
         const matchesPayload = (await matchesResponse.json()) as ScoutMatchesResponse & {
           error?: string;
         };
+>>>>>>> main
         const metricsPayload = (await metricsResponse.json()) as ScoutPredictionMetrics & {
           error?: string;
         };
         const historyPayload = (await historyResponse.json()) as ScoutHistoryResponse;
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
         if (!matchesResponse.ok) {
           throw new Error(matchesPayload.error ?? "Unable to load scouting data.");
         }
 
+>>>>>>> main
         if (!metricsResponse.ok) {
           throw new Error(metricsPayload.error ?? "Unable to load scouting metrics.");
         }
@@ -298,7 +363,10 @@ export default function HomePage() {
           return;
         }
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+=======
         setMatches(matchesPayload.matches ?? []);
+>>>>>>> main
         setMetrics(metricsPayload);
         setHistory(historyPayload.history ?? []);
       } catch (loadError) {
@@ -313,7 +381,11 @@ export default function HomePage() {
         );
       } finally {
         if (active) {
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+          setLoadingDashboard(false);
+=======
           setLoading(false);
+>>>>>>> main
         }
       }
     }
@@ -325,6 +397,39 @@ export default function HomePage() {
     };
   }, []);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+  async function handleLoadLeague() {
+    setLoadingLeague(true);
+    setLeagueError(null);
+
+    try {
+      const response = await fetch(`/api/scout?league=${selectedLeague}`, {
+        cache: "no-store",
+      });
+
+      const payload = (await response.json()) as ScoutLeagueResponse & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to load league scouting data.");
+      }
+
+      setLoadedLeagues((previous) => ({
+        ...previous,
+        [payload.league_code]: payload,
+      }));
+    } catch (loadError) {
+      setLeagueError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load league scouting data.",
+      );
+    } finally {
+      setLoadingLeague(false);
+    }
+  }
+
+=======
+>>>>>>> main
   const completedHistory = useMemo(
     () => history.filter((record) => record.correct_result !== null),
     [history],
@@ -344,11 +449,29 @@ export default function HomePage() {
 
   const historyRows = useMemo(() => [...history].reverse().slice(0, 50), [history]);
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+  const loadedLeagueEntries = useMemo(
+    () => Object.values(loadedLeagues),
+    [loadedLeagues],
+  );
+
+  const totalLoadedMatches = useMemo(
+    () => loadedLeagueEntries.reduce((sum, league) => sum + league.matches.length, 0),
+    [loadedLeagueEntries],
+  );
+
+  const titleText = useMemo(() => {
+    if (loadingDashboard) return "Loading dashboard metrics and history...";
+    if (error) return "Dashboard data unavailable";
+    return "Upcoming Match Scout Board";
+  }, [loadingDashboard, error]);
+=======
   const titleText = useMemo(() => {
     if (loading) return "Loading scouting data...";
     if (error) return "Scouting data unavailable";
     return "Upcoming Match Scout Board";
   }, [loading, error]);
+>>>>>>> main
 
   const calibrationStatus = useMemo(() => {
     const high = metrics?.high_confidence_accuracy;
@@ -381,17 +504,51 @@ export default function HomePage() {
         <p>{titleText}</p>
       </section>
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      <section className="panel">
+        <h2>Load League Scouting Data</h2>
+        <div className="stat-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <label htmlFor="league-select">League</label>
+          <select
+            id="league-select"
+            value={selectedLeague}
+            onChange={(event) => setSelectedLeague(event.target.value as LeagueCode)}
+          >
+            {LEAGUE_OPTIONS.map((league) => (
+              <option key={league.code} value={league.code}>
+                {league.code} - {league.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={handleLoadLeague} disabled={loadingLeague}>
+            {loadingLeague ? "Loading League..." : "Load League"}
+          </button>
+        </div>
+        {leagueError ? <p className="state-panel error-panel">{leagueError}</p> : null}
+      </section>
+
+      {loadingDashboard ? (
+        <section className="panel state-panel">Loading metrics and history…</section>
+      ) : null}
+
+      {!loadingDashboard && error ? (
+=======
       {loading ? (
         <section className="panel state-panel">Loading matches, metrics and history…</section>
       ) : null}
 
       {!loading && error ? (
+>>>>>>> main
         <section className="panel state-panel error-panel">
           Failed to load dashboard data: {error}
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      {!loadingDashboard && !error ? (
+=======
       {!loading && !error ? (
+>>>>>>> main
         <section className="panel metrics-panel">
           <h2>Prediction Metrics</h2>
           <div className="metrics-grid">
@@ -426,8 +583,12 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      {!loadingDashboard && !error ? (
+=======
 
       {!loading && !error ? (
+>>>>>>> main
         <section className="panel calibration-panel">
           <h2>Calibration Summary</h2>
           <div className="calibration-grid">
@@ -453,7 +614,11 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      {!loadingDashboard && !error ? (
+=======
       {!loading && !error ? (
+>>>>>>> main
         <section className="panel history-panel">
           <h2>Prediction History</h2>
           {historyRows.length === 0 ? (
@@ -503,6 +668,37 @@ export default function HomePage() {
         </section>
       ) : null}
 
+<<<<<<< codex/build-next.js-private-scouting-dashboard-cxvhht
+      {loadedLeagueEntries.length === 0 ? (
+        <section className="panel state-panel">
+          Select a league and click Load League to view scouting data.
+        </section>
+      ) : (
+        <section className="panel players-panel">
+          <h2>Loaded League Matches ({totalLoadedMatches})</h2>
+          {loadedLeagueEntries.map((league) => (
+            <section key={league.league_code} className="panel">
+              <h3>
+                {league.league_name} ({league.league_code})
+              </h3>
+              <p className="meta-line">Last updated: {formatDate(league.last_updated)}</p>
+              {league.matches.length === 0 ? (
+                <p className="state-panel">No upcoming scheduled matches in the next 48 hours.</p>
+              ) : (
+                <div className="cards-grid">
+                  {league.matches.map((match) => (
+                    <MatchCard
+                      key={`${league.league_code}-${match.home_team_id}-${match.away_team_id}-${match.match_date}`}
+                      match={match}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </section>
+      )}
+=======
       {!loading && !error && matches.length === 0 ? (
         <section className="panel state-panel">No upcoming scheduled matches in the next 48 hours.</section>
       ) : null}
@@ -520,6 +716,7 @@ export default function HomePage() {
           </div>
         </section>
       ) : null}
+>>>>>>> main
     </main>
   );
 }
