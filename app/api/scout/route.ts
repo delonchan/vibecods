@@ -17,6 +17,12 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await getScoutMatchesData(league);
+import { getScoutMatchesData } from "@/lib/footballData";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  try {
+    const data = await getScoutMatchesData();
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {

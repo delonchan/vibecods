@@ -49,10 +49,6 @@ export interface HeadToHeadSnapshot {
   avg_goals_h2h: number | null;
 }
 
-export type PredictedResult = "home" | "draw" | "away";
-export type ConfidenceBand = "low" | "medium" | "high";
-export type ActualResult = "home" | "draw" | "away";
-
 export interface MatchIntelligenceSnapshot {
   expected_goals: number;
   btts_probability: number;
@@ -83,14 +79,9 @@ export interface ScoutMatchesResponse {
   matches: ScoutMatch[];
 }
 
-export type LeagueCode = "PL" | "PD" | "BL1" | "SA" | "CL";
-
-export interface ScoutLeagueResponse {
-  league_code: LeagueCode;
-  league_name: string;
-  last_updated: string;
-  matches: ScoutMatch[];
-}
+export type PredictedResult = "home" | "draw" | "away";
+export type ConfidenceBand = "low" | "medium" | "high";
+export type ActualResult = "home" | "draw" | "away";
 
 export interface PredictionRecord {
   match_id: string;
