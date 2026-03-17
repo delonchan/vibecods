@@ -356,8 +356,14 @@ async function fetchCompetitionMatches(
     fetchCompetitionStandings(competitionCode),
   ]);
 
+  const UPCOMING_MATCH_STATUSES = new Set(["SCHEDULED", "TIMED"]);
+
   const matches = (matchesPayload.matches ?? [])
-    .filter((match) => match.status === "SCHEDULED" && isWithinNext48Hours(match.utcDate))
+    .filter(
+      (match) =>
+        UPCOMING_MATCH_STATUSES.has(match.status) &&
+        isWithinNext48Hours(match.utcDate),
+    )
     .map((match) => ({
       league: leagueName,
       competition_code: competitionCode,
