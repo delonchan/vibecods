@@ -1,17 +1,20 @@
-import { appendPredictionRecords, readPredictionRecords, writePredictionRecords } from "@/lib/predictionStore";
+import {
+  appendPredictionRecords,
+  readPredictionRecords,
+  writePredictionRecords,
+} from "@/lib/predictionStore";
 import {
   ActualResult,
   ConfidenceBand,
   HeadToHeadSnapshot,
   MatchIntelligenceSnapshot,
+  PredictionEvaluationRefreshSummary,
   PredictionRecord,
   PredictedResult,
   ScoutMatch,
-  ScoutMatchesResponse,
   ScoutPredictionMetrics,
   TeamFormSnapshot,
   TeamSeasonStatsSnapshot,
-  PredictionEvaluationRefreshSummary,
   UpcomingPredictionRefreshSummary,
 } from "@/lib/types";
 
@@ -28,6 +31,15 @@ const COMPETITIONS = [
   { code: "BL1", league: "Bundesliga" },
   { code: "CL", league: "Champions League" },
 ] as const;
+
+export type SupportedLeagueCode = (typeof COMPETITIONS)[number]["code"];
+
+export interface ScoutLeagueResponse {
+  league_code: SupportedLeagueCode;
+  league_name: string;
+  last_updated: string;
+  matches: ScoutMatch[];
+}
 
 const EMPTY_FORM: TeamFormSnapshot = {
   last_5_form: [],
@@ -100,15 +112,6 @@ function computeStrengthDelta(match: ScoutMatch): number {
   const formComponent = (homeFormPoints - awayFormPoints) * 0.9;
   const concededComponent = (awayConcededAvg - homeConcededAvg) * 5;
 
-  // Strength delta formula (deterministic):
-  // (league position signal) + (points signal) + (recent form signal)
-  // + (defensive signal) + (fixed home advantage bonus)
-  //
-  // delta = 0.8*(awayPos-homePos)
-  //       + (homePts-awayPts)/3
-  //       + 0.9*(homeFormPts-awayFormPts)
-  //       + 5*(awayConcededAvg-homeConcededAvg)
-  //       + HOME_ADVANTAGE_BONUS
   return Number(
     (
       leaguePositionComponent +
@@ -217,7 +220,6 @@ async function persistPredictionsForMatches(matches: ScoutMatch[]): Promise<void
   await appendPredictionRecords(records);
 }
 
-
 interface FootballDataCompetitionMatchesResponse {
   matches?: Array<{
     status: string;
@@ -300,9 +302,7 @@ async function fetchFootballDataJson<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Failed request for ${path}: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed request for ${path}: ${response.status} ${response.statusText}`);
   }
 
   return (await response.json()) as T;
@@ -338,10 +338,9 @@ function buildStandingsLookup(
 async function fetchCompetitionStandings(
   competitionCode: string,
 ): Promise<Map<number, TeamSeasonStatsSnapshot>> {
-  const payload =
-    await fetchFootballDataJson<FootballDataCompetitionStandingsResponse>(
-      `/competitions/${competitionCode}/standings`,
-    );
+  const payload = await fetchFootballDataJson<FootballDataCompetitionStandingsResponse>(
+    `/competitions/${competitionCode}/standings`,
+  );
 
   return buildStandingsLookup(payload);
 }
@@ -358,10 +357,7 @@ async function fetchCompetitionMatches(
   ]);
 
   const matches = (matchesPayload.matches ?? [])
-    .filter(
-      (match) =>
-        match.status === "SCHEDULED" && isWithinNext48Hours(match.utcDate),
-    )
+    .filter((match) => match.status === "SCHEDULED" && isWithinNext48Hours(match.utcDate))
     .map((match) => ({
       league: leagueName,
       competition_code: competitionCode,
@@ -379,10 +375,7 @@ async function fetchCompetitionMatches(
   };
 }
 
-function computeTeamForm(
-  teamId: number,
-  matches: FootballDataTeamMatch[],
-): TeamFormSnapshot {
+function computeTeamForm(teamId: number, matches: FootballDataTeamMatch[]): TeamFormSnapshot {
   const finishedMatches = matches.filter((match) => match.status === "FINISHED");
 
   const last_5_form: Array<"W" | "D" | "L"> = [];
@@ -455,10 +448,7 @@ function computeHeadToHeadFromMatches(
 
       return isCurrentPairing;
     })
-    .sort(
-      (a, b) =>
-        new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime(),
-    )
+    .sort((a, b) => new Date(b.utcDate).getTime() - new Date(a.utcDate).getTime())
     .slice(0, 5);
 
   if (headToHeadMatches.length === 0) {
@@ -563,15 +553,12 @@ function computeBttsRate(form?: TeamFormSnapshot): number {
 
 function computePredictabilityScore(match: ScoutMatch): number {
   const positionGap = Math.abs(
-    (match.home_season_stats?.position ?? 0) -
-      (match.away_season_stats?.position ?? 0),
+    (match.home_season_stats?.position ?? 0) - (match.away_season_stats?.position ?? 0),
   );
   const pointsGap = Math.abs(
     (match.home_season_stats?.points ?? 0) - (match.away_season_stats?.points ?? 0),
   );
-  const formGap = Math.abs(
-    computeFormPoints(match.home_form) - computeFormPoints(match.away_form),
-  );
+  const formGap = Math.abs(computeFormPoints(match.home_form) - computeFormPoints(match.away_form));
   const concededGap = Math.abs(
     average(match.home_form?.recent_goals_conceded ?? []) -
       average(match.away_form?.recent_goals_conceded ?? []),
@@ -584,8 +571,8 @@ function computePredictabilityScore(match: ScoutMatch): number {
 
   const weightedScore =
     positionFactor * 0.35 +
-    pointsFactor * 0.30 +
-    formFactor * 0.20 +
+    pointsFactor * 0.3 +
+    formFactor * 0.2 +
     concededFactor * 0.15;
 
   return Math.round(clamp(weightedScore * 100, 0, 100));
@@ -599,7 +586,7 @@ function computeMatchIntelligence(match: ScoutMatch): MatchIntelligenceSnapshot 
     const homeAvgConceded = average(match.home_form?.recent_goals_conceded ?? []);
 
     const expectedGoalsRaw =
-      ((homeAvgScored + awayAvgConceded) + (awayAvgScored + homeAvgConceded)) / 2;
+      (homeAvgScored + awayAvgConceded + awayAvgScored + homeAvgConceded) / 2;
     const expected_goals = Number(expectedGoalsRaw.toFixed(2));
 
     const homeBttsRate = computeBttsRate(match.home_form);
@@ -704,10 +691,9 @@ async function fetchFinishedMatchForPrediction(
   prediction: PredictionRecord,
 ): Promise<{ homeGoals: number; awayGoals: number; completedAt: string } | null> {
   try {
-    const payload =
-      await fetchFootballDataJson<FootballDataCompetitionMatchesResponse>(
-        `/competitions/${prediction.competition_code}/matches`,
-      );
+    const payload = await fetchFootballDataJson<FootballDataCompetitionMatchesResponse>(
+      `/competitions/${prediction.competition_code}/matches`,
+    );
 
     const target = (payload.matches ?? []).find((match) => {
       if (match.status !== "FINISHED") {
@@ -740,7 +726,12 @@ async function fetchFinishedMatchForPrediction(
     const homeGoals = teamMatch?.score?.fullTime?.home;
     const awayGoals = teamMatch?.score?.fullTime?.away;
 
-    if (homeGoals === null || homeGoals === undefined || awayGoals === null || awayGoals === undefined) {
+    if (
+      homeGoals === null ||
+      homeGoals === undefined ||
+      awayGoals === null ||
+      awayGoals === undefined
+    ) {
       return null;
     }
 
@@ -752,6 +743,10 @@ async function fetchFinishedMatchForPrediction(
   } catch {
     return null;
   }
+}
+
+export function isSupportedLeagueCode(value: string): value is SupportedLeagueCode {
+  return COMPETITIONS.some((competition) => competition.code === value);
 }
 
 export async function reconcileCompletedPredictions(): Promise<void> {
@@ -822,86 +817,59 @@ export async function getPredictionMetrics(): Promise<ScoutPredictionMetrics> {
   };
 }
 
-export async function getScoutMatchesData(): Promise<ScoutMatchesResponse> {
+export async function getScoutMatchesData(
+  leagueCode: SupportedLeagueCode,
+): Promise<ScoutLeagueResponse> {
   if (!FOOTBALL_DATA_API_KEY) {
     throw new Error("FOOTBALL_DATA_API_KEY is required.");
   }
 
-  const results = await Promise.all(
-    COMPETITIONS.map(async (competition) => {
-      try {
-        const result = await fetchCompetitionMatches(
-          competition.code,
-          competition.league,
-        );
+  const competition = COMPETITIONS.find((item) => item.code === leagueCode);
 
-        return {
-          code: competition.code,
-          ...result,
-        };
-      } catch (error) {
-        return {
-          error:
-            error instanceof Error
-              ? error.message
-              : `Unknown error for ${competition.code}`,
-          code: competition.code,
-        };
-      }
-    }),
-  );
-
-  const scheduledMatches: ScheduledMatchBase[] = [];
-  const standingsByCompetition = new Map<
-    string,
-    Map<number, TeamSeasonStatsSnapshot>
-  >();
-  const errors: string[] = [];
-
-  for (const result of results) {
-    if ("matches" in result && "standingsMap" in result) {
-      scheduledMatches.push(...result.matches);
-      standingsByCompetition.set(result.code, result.standingsMap);
-      continue;
-    }
-
-    errors.push(`${result.code}: ${result.error}`);
+  if (!competition) {
+    throw new Error(`Unsupported league code: ${leagueCode}`);
   }
 
-  if (scheduledMatches.length === 0 && errors.length > 0) {
-    throw new Error(`Unable to fetch matches. ${errors.join(" | ")}`);
+  let result: CompetitionFetchResult;
+
+  try {
+    result = await fetchCompetitionMatches(competition.code, competition.league);
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Unable to fetch matches for ${competition.code}: ${error.message}`
+        : `Unable to fetch matches for ${competition.code}`,
+    );
   }
 
   const teamFormCache = new Map<number, Promise<TeamFormSnapshot>>();
   const teamFinishedMatchesCache = new Map<number, Promise<FootballDataTeamMatch[]>>();
 
   const matchesWithEnrichment = await Promise.all(
-    scheduledMatches.map((match) =>
-      addEnrichmentToMatch(
-        match,
-        teamFormCache,
-        standingsByCompetition.get(match.competition_code) ?? new Map(),
-        teamFinishedMatchesCache,
-      ),
+    result.matches.map((match) =>
+      addEnrichmentToMatch(match, teamFormCache, result.standingsMap, teamFinishedMatchesCache),
     ),
   );
 
   const sortedMatches = matchesWithEnrichment.sort(
-    (a, b) =>
-      new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
+    (a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime(),
   );
 
   await persistPredictionsForMatches(sortedMatches);
 
   return {
+    league_code: competition.code,
+    league_name: competition.league,
+    last_updated: new Date().toISOString(),
     matches: sortedMatches,
   };
 }
 
-
-export async function refreshUpcomingPredictions(): Promise<UpcomingPredictionRefreshSummary> {
+export async function refreshUpcomingPredictions(
+  leagueCode: SupportedLeagueCode,
+): Promise<UpcomingPredictionRefreshSummary> {
   const beforeCount = (await readPredictionRecords()).length;
-  const scoutData = await getScoutMatchesData();
+  const scoutData = await getScoutMatchesData(leagueCode);
   const afterCount = (await readPredictionRecords()).length;
 
   return {
